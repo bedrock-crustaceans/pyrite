@@ -1,0 +1,7 @@
+[package]
+name = "pyrite"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# chorus = { git = "https://github.com/bedrock-crustaceans/chorus.git" }
