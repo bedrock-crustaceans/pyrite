@@ -3,5 +3,12 @@ name = "pyrite"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+path = "src/lib.rs"
+
 [dependencies]
-# chorus = { git = "https://github.com/bedrock-crustaceans/chorus.git" }
+bevy_app = "0.19.1"
+bevy_ecs = "0.19.1"
+chorus = { git = "https://github.com/bedrock-crustaceans/chorus.git" }
+tracing = "0.1.44"
+glam = "0.33.2"
