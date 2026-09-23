@@ -43,9 +43,9 @@ impl JavaRand {
     }
 
     pub fn next_i64(&mut self) -> i64 {
-        let hi = self.next(32);
-        let lo = self.next(32);
-        (hi << 32) | lo
+        let hi = self.next_i32() as i64;
+        let lo = self.next_i32() as i64;
+        (hi << 32).wrapping_add(lo)
     }
 
     pub fn next_bool(&mut self) -> bool {

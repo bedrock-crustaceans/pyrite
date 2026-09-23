@@ -19,7 +19,7 @@ impl PerlinNoise {
         let mut permutations = Box::new(std::array::from_fn::<u16, 512, _>(|i| if i < 256 { i as u16 } else { 0 }));
 
         for index in 0usize..256 {
-            let swap_with = rand.next_i32_bounded((256 - index) as i32) as usize + index;
+            let swap_with = rand.next_i32_bounded(256 - index as i32) as usize + index;
             permutations.swap(index, swap_with);
             permutations[index + 256] = permutations[index];
         }
@@ -55,8 +55,7 @@ impl PerlinNoise {
 
                         edge_y0z0 = lerp(x_fade, gradient(self.permutations[a0], x, y, z), gradient(self.permutations[b0], x - 1.0, y, z));
                         edge_y1z0 = lerp(x_fade, gradient(self.permutations[a1], x, y - 1.0, z), gradient(self.permutations[b1], x - 1.0, y - 1.0, z));
-                        edge_y0z1 =
-                            lerp(x_fade, gradient(self.permutations[a0 + 1], x, y, z - 1.0), gradient(self.permutations[b0 + 1], x - 1.0, y, z - 1.0));
+                        edge_y0z1 = lerp(x_fade, gradient(self.permutations[a0 + 1], x, y, z - 1.0), gradient(self.permutations[b0 + 1], x - 1.0, y, z - 1.0));
                         edge_y1z1 = lerp(
                             x_fade,
                             gradient(self.permutations[a1 + 1], x, y - 1.0, z - 1.0),
@@ -124,8 +123,7 @@ impl PerlinNoise {
 
                     edge_y0z0 = lerp(x_fade, gradient(self.permutations[a0], x, y, z), gradient(self.permutations[b0], x - 1.0, y, z));
                     edge_y1z0 = lerp(x_fade, gradient(self.permutations[a1], x, y - 1.0, z), gradient(self.permutations[b1], x - 1.0, y - 1.0, z));
-                    edge_y0z1 =
-                        lerp(x_fade, gradient(self.permutations[a0 + 1], x, y, z - 1.0), gradient(self.permutations[b0 + 1], x - 1.0, y, z - 1.0));
+                    edge_y0z1 = lerp(x_fade, gradient(self.permutations[a0 + 1], x, y, z - 1.0), gradient(self.permutations[b0 + 1], x - 1.0, y, z - 1.0));
                     edge_y1z1 = lerp(
                         x_fade,
                         gradient(self.permutations[a1 + 1], x, y - 1.0, z - 1.0),
@@ -191,14 +189,26 @@ fn lerp(t: f64, from: f64, to: f64) -> f64 {
 fn gradient(hash: u16, x: f64, y: f64, z: f64) -> f64 {
     let hash = hash & 15;
     let u = if hash < 8 { x } else { y };
-    let v = if hash < 4 { y } else if hash != 12 && hash != 14 { z } else { x };
+    let v = if hash < 4 {
+        y
+    } else if hash != 12 && hash != 14 {
+        z
+    } else {
+        x
+    };
     (if hash & 1 == 0 { u } else { -u }) + (if hash & 2 == 0 { v } else { -v })
 }
 
 fn gradient_flat(hash: u16, x: f64, z: f64) -> f64 {
     let hash = hash & 15;
     let u = (1 - ((hash & 8) >> 3)) as f64 * x;
-    let v = if hash < 4 { 0.0 } else if hash != 12 && hash != 14 { z } else { x };
+    let v = if hash < 4 {
+        0.0
+    } else if hash != 12 && hash != 14 {
+        z
+    } else {
+        x
+    };
     (if hash & 1 == 0 { u } else { -u }) + (if hash & 2 == 0 { v } else { -v })
 }
 
