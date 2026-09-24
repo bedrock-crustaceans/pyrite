@@ -5,37 +5,36 @@
 
 use glam::{DVec3, IVec3};
 
-use crate::level::generator::java_rand::JavaRand;
-
-use super::owner_buffer::{OwnerBuffer, read, write};
+use super::block_ids::BlockIds;
+use super::quad_chunk_buffer::{QuadChunkBuffer, read, write};
 use super::vein::next_offset;
-use super::{BlockIds, CHUNK_WIDTH, OverworldGenerator};
+use super::{CHUNK_WIDTH, TerrainSource};
+use crate::rand::java::JavaRand;
+use crate::rand::primitives::Bound;
 
-/// Places every lake belonging to owner chunk `(owner_x, owner_z)` into its own
-/// `OwnerBuffer`. Continues the same population RNG stream `rand` is already partway
-/// through (see `population::populate_owner`) - water lakes, then lava lakes,
-/// matching the reference's own order (both come before veins).
-pub fn populate_from(generator: &OverworldGenerator, buffer: &mut OwnerBuffer, owner_x: i32, owner_z: i32, rand: &mut JavaRand) {
+pub fn populate_from(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, owner_x: i32, owner_z: i32, block_ids: &BlockIds, rand: &mut JavaRand) {
     let origin = IVec3::new(owner_x * CHUNK_WIDTH as i32, 0, owner_z * CHUNK_WIDTH as i32);
-    let block_ids = &generator.block_ids;
 
-    if rand.next_i32_bounded(4) == 0 {
+    if rand.random_with::<i32>(Bound::new(4)) == 0 {
         let pos = origin + next_offset(rand, 128, 8);
         place_lake(generator, buffer, block_ids, block_ids.water, pos, rand);
     }
 
-    if rand.next_i32_bounded(8) == 0 {
+    if rand.random_with::<i32>(Bound::new(8)) == 0 {
+        let bound = CHUNK_WIDTH as i32;
+        let bound1 = CHUNK_WIDTH as i32;
         let pos = origin
             + IVec3::new(
-                rand.next_i32_bounded(CHUNK_WIDTH as i32) + 8,
-                {
-                    let v = rand.next_i32_bounded(120);
-                    rand.next_i32_bounded(v + 8)
+            rand.random_with::<i32>(Bound::new(bound1)) + 8,
+            {
+                    let v = rand.random_with::<i32>(Bound::new(120));
+                    let bound1 = v + 8;
+                    rand.random_with::<i32>(Bound::new(bound1))
                 },
-                rand.next_i32_bounded(CHUNK_WIDTH as i32) + 8,
+            rand.random_with::<i32>(Bound::new(bound)) + 8,
             );
 
-        if pos.y < 64 || rand.next_i32_bounded(10) == 0 {
+        if pos.y < 64 || rand.random_with::<i32>(Bound::new(10)) == 0 {
             place_lake(generator, buffer, block_ids, block_ids.lava_still, pos, rand);
         }
     }
@@ -49,10 +48,8 @@ fn is_fluid(block_ids: &BlockIds, id: i32) -> bool {
     id == block_ids.water || id == block_ids.lava || id == block_ids.lava_still
 }
 
-/// Places a lake of `fluid_id` (water or still lava) centered near `pos`, ported from
-/// the reference's `LakeGenerator`.
 #[allow(clippy::too_many_arguments)]
-fn place_lake(generator: &OverworldGenerator, buffer: &mut OwnerBuffer, block_ids: &BlockIds, fluid_id: i32, mut pos: IVec3, rand: &mut JavaRand) -> bool {
+fn place_lake(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, fluid_id: i32, mut pos: IVec3, rand: &mut JavaRand) -> bool {
     pos -= IVec3::new(8, 0, 8);
 
     while pos.y > 0 && read(generator, buffer, pos.x, pos.y, pos.z) == block_ids.air {
@@ -63,10 +60,10 @@ fn place_lake(generator: &OverworldGenerator, buffer: &mut OwnerBuffer, block_id
     // [X][Z][Y], matching the reference's own indexing.
     let mut fill = [[[false; 8]; 16]; 16];
 
-    let count = rand.next_i32_bounded(4) + 4;
+    let count = rand.random_with::<i32>(Bound::new(4)) + 4;
     for _ in 0..count {
-        let a = DVec3::new(rand.next_double(), rand.next_double(), rand.next_double()) * DVec3::new(6.0, 4.0, 6.0) + DVec3::new(3.0, 2.0, 3.0);
-        let b = DVec3::new(rand.next_double(), rand.next_double(), rand.next_double()) * (DVec3::new(16.0, 8.0, 16.0) - a - DVec3::new(2.0, 4.0, 2.0)) + DVec3::new(1.0, 2.0, 1.0) + a / 2.0;
+        let a = DVec3::new(rand.random::<f64>(), rand.random::<f64>(), rand.random::<f64>()) * DVec3::new(6.0, 4.0, 6.0) + DVec3::new(3.0, 2.0, 3.0);
+        let b = DVec3::new(rand.random::<f64>(), rand.random::<f64>(), rand.random::<f64>()) * (DVec3::new(16.0, 8.0, 16.0) - a - DVec3::new(2.0, 4.0, 2.0)) + DVec3::new(1.0, 2.0, 1.0) + a / 2.0;
         let a = a / 2.0;
 
         for dx in 1..15usize {
@@ -139,7 +136,7 @@ fn place_lake(generator: &OverworldGenerator, buffer: &mut OwnerBuffer, block_id
         for dx in 0..16usize {
             for dz in 0..16usize {
                 for dy in 0..8usize {
-                    if is_edge(&fill, dx, dz, dy) && (dy < 4 || rand.next_i32_bounded(2) != 0) {
+                    if is_edge(&fill, dx, dz, dy) && (dy < 4 || rand.random_with::<i32>(Bound::new(2)) != 0) {
                         let place_pos = pos + IVec3::new(dx as i32, dy as i32, dz as i32);
                         let id = read(generator, buffer, place_pos.x, place_pos.y, place_pos.z);
                         if is_solid(block_ids, id) {

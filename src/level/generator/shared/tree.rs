@@ -1,23 +1,22 @@
 use glam::IVec3;
 
-use crate::level::generator::java_rand::JavaRand;
+use super::block_ids::BlockIds;
+use super::quad_chunk_buffer::{QuadChunkBuffer, read, write};
+use super::{CHUNK_HEIGHT, CHUNK_WIDTH, ClimateSource, TerrainSource};
 use crate::level::generator::math::MC_PI;
-use super::biome::Biome;
-use super::owner_buffer::{OwnerBuffer, read, write};
-use super::{BlockIds, CHUNK_HEIGHT, CHUNK_WIDTH, OverworldGenerator};
+use crate::level::generator::overworld::biome::Biome;
+use crate::rand::java::JavaRand;
+use crate::rand::primitives::Bound;
 
-/// Places every tree belonging to owner chunk `(owner_x, owner_z)` into its own
-/// `OwnerBuffer`. Continues the same population RNG stream `rand` is already partway
-/// through (see `population::populate_owner`).
-pub fn populate_from(generator: &OverworldGenerator, buffer: &mut OwnerBuffer, owner_x: i32, owner_z: i32, rand: &mut JavaRand) {
+pub fn populate_from<G: TerrainSource + ClimateSource>(generator: &G, buffer: &mut QuadChunkBuffer, owner_x: i32, owner_z: i32, block_ids: &BlockIds, rand: &mut JavaRand) {
     let origin = IVec3::new(owner_x * CHUNK_WIDTH as i32, 0, owner_z * CHUNK_WIDTH as i32);
     let biome = generator.biome_at(origin.x + 16, origin.z + 16);
 
     let feature_value = generator.feature_noise_at(origin.x as f64 * 0.5, origin.z as f64 * 0.5);
-    let base_tree_count = ((feature_value / 8.0 + rand.next_double() * 4.0 + 4.0) / 3.0) as i32;
+    let base_tree_count = ((feature_value / 8.0 + rand.random::<f64>() * 4.0 + 4.0) / 3.0) as i32;
 
     let mut tree_count = 0;
-    if rand.next_i32_bounded(10) == 0 {
+    if rand.random_with::<i32>(Bound::new(10)) == 0 {
         tree_count += 1;
     }
 
@@ -32,74 +31,68 @@ pub fn populate_from(generator: &OverworldGenerator, buffer: &mut OwnerBuffer, o
         return;
     }
 
-    let block_ids = &generator.block_ids;
-
     for _ in 0..tree_count {
-        let tree_x = origin.x + rand.next_i32_bounded(CHUNK_WIDTH as i32) + 8;
-        let tree_z = origin.z + rand.next_i32_bounded(CHUNK_WIDTH as i32) + 8;
-        let tree_y = surface_height(generator, buffer, tree_x, tree_z);
+        let bound = CHUNK_WIDTH as i32;
+        let tree_x = origin.x + rand.random_with::<i32>(Bound::new(bound)) + 8;
+        let bound = CHUNK_WIDTH as i32;
+        let tree_z = origin.z + rand.random_with::<i32>(Bound::new(bound)) + 8;
+        let tree_y = surface_height(generator, buffer, block_ids, tree_x, tree_z);
         let pos = IVec3::new(tree_x, tree_y, tree_z);
 
         match biome {
             Biome::Taiga => {
-                if rand.next_i32_bounded(3) == 0 {
-                    place_spruce1_tree(generator, buffer, pos, rand);
+                if rand.random_with::<i32>(Bound::new(3)) == 0 {
+                    place_spruce1_tree(generator, buffer, block_ids, pos, rand);
                 } else {
-                    place_spruce2_tree(generator, buffer, pos, rand);
+                    place_spruce2_tree(generator, buffer, block_ids, pos, rand);
                 }
             }
             Biome::Forest => {
-                if rand.next_i32_bounded(5) == 0 {
-                    place_simple_tree(generator, buffer, pos, 5, block_ids.birch_log, block_ids.birch_leaves, rand);
-                } else if rand.next_i32_bounded(3) == 0 {
-                    place_big_tree(generator, buffer, pos, rand);
+                if rand.random_with::<i32>(Bound::new(5)) == 0 {
+                    place_simple_tree(generator, buffer, block_ids, pos, 5, block_ids.birch_log, block_ids.birch_leaves, rand);
+                } else if rand.random_with::<i32>(Bound::new(3)) == 0 {
+                    place_big_tree(generator, buffer, block_ids, pos, rand);
                 } else {
-                    place_simple_tree(generator, buffer, pos, 4, block_ids.oak_log, block_ids.oak_leaves, rand);
+                    place_simple_tree(generator, buffer, block_ids, pos, 4, block_ids.oak_log, block_ids.oak_leaves, rand);
                 }
             }
             Biome::RainForest => {
-                if rand.next_i32_bounded(3) == 0 {
-                    place_big_tree(generator, buffer, pos, rand);
+                if rand.random_with::<i32>(Bound::new(3)) == 0 {
+                    place_big_tree(generator, buffer, block_ids, pos, rand);
                 } else {
-                    place_simple_tree(generator, buffer, pos, 4, block_ids.oak_log, block_ids.oak_leaves, rand);
+                    place_simple_tree(generator, buffer, block_ids, pos, 4, block_ids.oak_log, block_ids.oak_leaves, rand);
                 }
             }
             _ => {
-                if rand.next_i32_bounded(10) == 0 {
-                    place_big_tree(generator, buffer, pos, rand);
+                if rand.random_with::<i32>(Bound::new(10)) == 0 {
+                    place_big_tree(generator, buffer, block_ids, pos, rand);
                 } else {
-                    place_simple_tree(generator, buffer, pos, 4, block_ids.oak_log, block_ids.oak_leaves, rand);
+                    place_simple_tree(generator, buffer, block_ids, pos, 4, block_ids.oak_log, block_ids.oak_leaves, rand);
                 }
             }
         }
     }
 }
 
-/// The reference's `world.get_height`: the first non-air block's Y, plus one, scanning
-/// down from the build limit.
-fn surface_height(generator: &OverworldGenerator, buffer: &OwnerBuffer, wx: i32, wz: i32) -> i32 {
-    let air = generator.block_ids.air;
+fn surface_height(generator: &impl TerrainSource, buffer: &QuadChunkBuffer, block_ids: &BlockIds, wx: i32, wz: i32) -> i32 {
     for wy in (0..CHUNK_HEIGHT as i32).rev() {
-        if read(generator, buffer, wx, wy, wz) != air {
+        if read(generator, buffer, wx, wy, wz) != block_ids.air {
             return wy + 1;
         }
     }
     0
 }
 
-pub(super) fn is_leaves(block_ids: &BlockIds, id: i32) -> bool {
+pub fn is_leaves(block_ids: &BlockIds, id: i32) -> bool {
     id == block_ids.oak_leaves || id == block_ids.birch_leaves || id == block_ids.spruce_leaves
 }
 
-/// Checks that a tree can grow: the ground below is grass/dirt, and there's clear
-/// (air or leaves) space in a `check_radius(y)`-wide column above it.
-fn check_tree(generator: &OverworldGenerator, buffer: &OwnerBuffer, pos: IVec3, height: i32, check_radius: impl Fn(i32) -> i32) -> bool {
+fn check_tree(generator: &impl TerrainSource, buffer: &QuadChunkBuffer, block_ids: &BlockIds, pos: IVec3, height: i32, check_radius: impl Fn(i32) -> i32) -> bool {
     let max_y = pos.y + height + 1;
     if pos.y < 1 || max_y >= CHUNK_HEIGHT as i32 {
         return false;
     }
 
-    let block_ids = &generator.block_ids;
     let below = read(generator, buffer, pos.x, pos.y - 1, pos.z);
     if below != block_ids.grass && below != block_ids.dirt {
         return false;
@@ -121,10 +114,9 @@ fn check_tree(generator: &OverworldGenerator, buffer: &OwnerBuffer, pos: IVec3, 
     true
 }
 
-/// A plain single-trunk tree (oak, birch): a short trunk topped with a few layers of
-/// leaves that taper inward. Ported from the reference's `SimpleTreeGenerator`.
-fn place_simple_tree(generator: &OverworldGenerator, buffer: &mut OwnerBuffer, pos: IVec3, min_height: i32, log_id: i32, leaves_id: i32, rand: &mut JavaRand) -> bool {
-    let height = rand.next_i32_bounded(3) + min_height;
+#[allow(clippy::too_many_arguments)]
+fn place_simple_tree(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, pos: IVec3, min_height: i32, log_id: i32, leaves_id: i32, rand: &mut JavaRand) -> bool {
+    let height = rand.random_with::<i32>(Bound::new(3)) + min_height;
 
     let check_radius = |y: i32| {
         if y == pos.y {
@@ -136,11 +128,10 @@ fn place_simple_tree(generator: &OverworldGenerator, buffer: &mut OwnerBuffer, p
         }
     };
 
-    if !check_tree(generator, buffer, pos, height, check_radius) {
+    if !check_tree(generator, buffer, block_ids, pos, height, check_radius) {
         return false;
     }
 
-    let block_ids = &generator.block_ids;
     write(buffer, pos.x, pos.y - 1, pos.z, block_ids.dirt);
 
     for wy in (pos.y + height - 3)..=(pos.y + height) {
@@ -151,7 +142,7 @@ fn place_simple_tree(generator: &OverworldGenerator, buffer: &mut OwnerBuffer, p
             for wz in pos.z - radius..=pos.z + radius {
                 let dx = (wx - pos.x).abs();
                 let dz = (wz - pos.z).abs();
-                if dx != radius || dz != radius || (rand.next_i32_bounded(2) != 0 && dy != 0) {
+                if dx != radius || dz != radius || (rand.random_with::<i32>(Bound::new(2)) != 0 && dy != 0) {
                     let id = read(generator, buffer, wx, wy, wz);
                     if id == block_ids.air || is_leaves(block_ids, id) {
                         write(buffer, wx, wy, wz, leaves_id);
@@ -171,22 +162,20 @@ fn place_simple_tree(generator: &OverworldGenerator, buffer: &mut OwnerBuffer, p
     true
 }
 
-/// A spruce tree that tapers to a point (variant 1): leaves start partway up the
-/// trunk and shrink back to nothing near the top. Ported from `Spruce1TreeGenerator`.
-fn place_spruce1_tree(generator: &OverworldGenerator, buffer: &mut OwnerBuffer, pos: IVec3, rand: &mut JavaRand) -> bool {
-    let height = rand.next_i32_bounded(5) + 7;
-    let leaves_offset = height - rand.next_i32_bounded(2) - 3;
+fn place_spruce1_tree(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, pos: IVec3, rand: &mut JavaRand) -> bool {
+    let height = rand.random_with::<i32>(Bound::new(5)) + 7;
+    let leaves_offset = height - rand.random_with::<i32>(Bound::new(2)) - 3;
     let leaves_height = height - leaves_offset;
-    let max_radius = rand.next_i32_bounded(leaves_height + 1);
+    let bound = leaves_height + 1;
+    let max_radius = rand.random_with::<i32>(Bound::new(bound));
 
     let leaves_y = pos.y + leaves_offset;
     let check_radius = |y: i32| if y < leaves_y { 0 } else { max_radius };
 
-    if !check_tree(generator, buffer, pos, height, check_radius) {
+    if !check_tree(generator, buffer, block_ids, pos, height, check_radius) {
         return false;
     }
 
-    let block_ids = &generator.block_ids;
     write(buffer, pos.x, pos.y - 1, pos.z, block_ids.dirt);
 
     let mut current_radius = 0;
@@ -221,25 +210,22 @@ fn place_spruce1_tree(generator: &OverworldGenerator, buffer: &mut OwnerBuffer, 
     true
 }
 
-/// A spruce tree with a wider, more irregular canopy (variant 2). Ported from
-/// `Spruce2TreeGenerator`.
-fn place_spruce2_tree(generator: &OverworldGenerator, buffer: &mut OwnerBuffer, pos: IVec3, rand: &mut JavaRand) -> bool {
-    let height = rand.next_i32_bounded(4) + 6;
-    let leaves_offset = rand.next_i32_bounded(2) + 1;
+fn place_spruce2_tree(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, pos: IVec3, rand: &mut JavaRand) -> bool {
+    let height = rand.random_with::<i32>(Bound::new(4)) + 6;
+    let leaves_offset = rand.random_with::<i32>(Bound::new(2)) + 1;
     let leaves_height = height - leaves_offset;
-    let max_radius = rand.next_i32_bounded(2) + 2;
+    let max_radius = rand.random_with::<i32>(Bound::new(2)) + 2;
 
     let leaves_y = pos.y + leaves_offset;
     let check_radius = |y: i32| if y < leaves_y { 0 } else { max_radius };
 
-    if !check_tree(generator, buffer, pos, height, check_radius) {
+    if !check_tree(generator, buffer, block_ids, pos, height, check_radius) {
         return false;
     }
 
-    let block_ids = &generator.block_ids;
     write(buffer, pos.x, pos.y - 1, pos.z, block_ids.dirt);
 
-    let mut current_radius = rand.next_i32_bounded(2);
+    let mut current_radius = rand.random_with::<i32>(Bound::new(2));
     let mut start_radius = 0;
     let mut global_radius = 1;
 
@@ -268,7 +254,7 @@ fn place_spruce2_tree(generator: &OverworldGenerator, buffer: &mut OwnerBuffer, 
         }
     }
 
-    let log_offset = rand.next_i32_bounded(3);
+    let log_offset = rand.random_with::<i32>(Bound::new(3));
     for wy in pos.y..(pos.y + height - log_offset) {
         let id = read(generator, buffer, pos.x, wy, pos.z);
         if id == block_ids.air || is_leaves(block_ids, id) {
@@ -279,18 +265,13 @@ fn place_spruce2_tree(generator: &OverworldGenerator, buffer: &mut OwnerBuffer, 
     true
 }
 
-/// A big oak: a tapering trunk (possibly shortened if it runs into something) with
-/// leaf clusters scattered in rings around it, each connected back to the trunk by
-/// its own branch. Ported from the reference's `BigTreeGenerator` (its "natural"
-/// variant - the only one the reference itself ever calls out of population).
 #[derive(Clone, Copy)]
 struct BigTreeNode {
     pos: IVec3,
     start_y: i32,
 }
 
-//noinspection ALL,RsApproxConstant
-fn place_big_tree(generator: &OverworldGenerator, buffer: &mut OwnerBuffer, pos: IVec3, rand: &mut JavaRand) -> bool {
+fn place_big_tree(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, pos: IVec3, rand: &mut JavaRand) -> bool {
     const HEIGHT_RANGE: i32 = 12;
     const HEIGHT_ATTENUATION: f32 = 0.618;
     const LEAF_DENSITY: f32 = 1.0;
@@ -298,13 +279,8 @@ fn place_big_tree(generator: &OverworldGenerator, buffer: &mut OwnerBuffer, pos:
     const BRANCH_SCALE: f32 = 1.0;
     const BRANCH_SLOPE: f32 = 0.381;
 
-    let block_ids = &generator.block_ids;
-
-    // Reseed happens unconditionally, before the ground check - the reference
-    // does this too, and skipping the reseed on a failed check desyncs everything
-    // placed after this in the owner's stream.
-    let mut rand = JavaRand::new(rand.next_i64());
-    let mut height = rand.next_i32_bounded(HEIGHT_RANGE) + 5;
+    let mut rand = JavaRand::new(rand.random::<i64>());
+    let mut height = rand.random_with::<i32>(Bound::new(HEIGHT_RANGE)) + 5;
 
     let below = read(generator, buffer, pos.x, pos.y - 1, pos.z);
     if below != block_ids.grass && below != block_ids.dirt {
@@ -340,8 +316,8 @@ fn place_big_tree(generator: &OverworldGenerator, buffer: &mut OwnerBuffer, pos:
         let size = calc_big_tree_layer_size(leaf_offset, height);
         if size >= 0.0 {
             for _ in 0..nodes_per_height {
-                let length = BRANCH_SCALE * size * (rand.next_float() + 0.328);
-                let angle = rand.next_float() * 2.0 * MC_PI;
+                let length = BRANCH_SCALE * size * (rand.random::<f32>() + 0.328);
+                let angle = rand.random::<f32>() * 2.0 * MC_PI;
 
                 let leaf_x = (length * angle.sin() + pos.x as f32 + 0.5).floor() as i32;
                 let leaf_z = (length * angle.cos() + pos.z as f32 + 0.5).floor() as i32;
@@ -379,16 +355,14 @@ fn place_big_tree(generator: &OverworldGenerator, buffer: &mut OwnerBuffer, pos:
     true
 }
 
-/// Grows a ball of leaves at `pos`, `branch_delta_height` layers tall, narrower at the
-/// very top and bottom than in the middle.
-fn place_big_tree_leaf(generator: &OverworldGenerator, buffer: &mut OwnerBuffer, block_ids: &BlockIds, pos: IVec3, branch_delta_height: i32) {
+fn place_big_tree_leaf(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, pos: IVec3, branch_delta_height: i32) {
     for dy in 0..branch_delta_height {
         let radius = if dy != 0 && dy != branch_delta_height - 1 { 3.0 } else { 2.0 };
         place_big_tree_leaf_layer(generator, buffer, block_ids, pos + IVec3::new(0, dy, 0), radius);
     }
 }
 
-fn place_big_tree_leaf_layer(generator: &OverworldGenerator, buffer: &mut OwnerBuffer, block_ids: &BlockIds, pos: IVec3, radius: f32) {
+fn place_big_tree_leaf_layer(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, pos: IVec3, radius: f32) {
     let block_radius = (radius + 0.618) as i32;
 
     for dx in -block_radius..=block_radius {
@@ -407,17 +381,13 @@ fn place_big_tree_leaf_layer(generator: &OverworldGenerator, buffer: &mut OwnerB
     }
 }
 
-/// Draws a log along the straight line from `from` to `to`, unconditionally (unlike
-/// every other tree's trunk, which only overwrites air/leaves).
-fn place_big_tree_branch(buffer: &mut OwnerBuffer, block_ids: &BlockIds, from: IVec3, to: IVec3) {
+fn place_big_tree_branch(buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, from: IVec3, to: IVec3) {
     for pos in BlockLineIter::new(from, to) {
         write(buffer, pos.x, pos.y, pos.z, block_ids.oak_log);
     }
 }
 
-/// Walks the straight line from `from` to `to` and returns the first position that
-/// isn't air or leaves, or `None` if the whole line is clear.
-fn check_big_tree_branch(generator: &OverworldGenerator, buffer: &OwnerBuffer, block_ids: &BlockIds, from: IVec3, to: IVec3) -> Option<IVec3> {
+fn check_big_tree_branch(generator: &impl TerrainSource, buffer: &QuadChunkBuffer, block_ids: &BlockIds, from: IVec3, to: IVec3) -> Option<IVec3> {
     for pos in BlockLineIter::new(from, to) {
         let id = read(generator, buffer, pos.x, pos.y, pos.z);
         if id != block_ids.air && !is_leaves(block_ids, id) {
@@ -444,10 +414,6 @@ fn calc_big_tree_layer_size(leaf_offset: i32, height: i32) -> f32 {
     }) * 0.5
 }
 
-/// Iterates every block position along a straight 3D line from `from` to `to`
-/// inclusive, stepping one block at a time along whichever axis has the largest
-/// delta and interpolating the other two. Ported from the reference's
-/// `BlockLineIter`.
 #[derive(Default)]
 struct BlockLineIter {
     from: IVec3,

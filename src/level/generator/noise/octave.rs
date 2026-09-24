@@ -1,7 +1,7 @@
 use glam::{DVec2, DVec3};
 
-use crate::level::generator::java_rand::JavaRand;
 use crate::level::generator::noise::perlin::PerlinNoise;
+use crate::rand::java::JavaRand;
 
 #[derive(Clone, Debug)]
 pub struct OctaveNoise {

@@ -1,15 +1,12 @@
 use glam::{DVec3, IVec3};
 
-use crate::level::generator::java_rand::JavaRand;
+use super::block_ids::BlockIds;
+use super::chunk_buffer::ChunkBuffer;
+use super::{CHUNK_WIDTH, chunk_seed};
 use crate::level::generator::math::{MC_PI, mc_sin, mc_sin_cos};
+use crate::rand::java::JavaRand;
+use crate::rand::primitives::Bound;
 
-use super::column::Column;
-use super::{BlockIds, CHUNK_WIDTH, owner_chunk_seed};
-
-/// Carves caves through a chunk column, ported from the beta 1.7.3 cave carver.
-///
-/// A cave can start in any chunk within `radius` of the target chunk and wander into it,
-/// so every one of those chunks gets its own deterministic seed and is walked in turn.
 pub struct CaveCarver {
     radius: i32,
 }
@@ -19,48 +16,53 @@ impl CaveCarver {
         Self { radius }
     }
 
-    pub fn carve(&self, seed: i64, x: i32, z: i32, column: &mut Column, block_ids: &BlockIds) {
+    pub fn carve(&self, seed: i64, x: i32, z: i32, column: &mut ChunkBuffer, block_ids: &BlockIds) {
         let mut rand = JavaRand::new(seed);
 
         for from_x in x - self.radius..=x + self.radius {
             for from_z in z - self.radius..=z + self.radius {
-                rand.set_seed(owner_chunk_seed(seed, from_x, from_z));
+                rand.set_seed(chunk_seed(seed, from_x, from_z));
                 self.carve_from(from_x, from_z, x, z, column, &mut rand, block_ids);
             }
         }
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn carve_from(&self, from_x: i32, from_z: i32, x: i32, z: i32, column: &mut Column, rand: &mut JavaRand, block_ids: &BlockIds) {
-        let count = rand.next_i32_bounded(40);
-        let count = rand.next_i32_bounded(count + 1);
-        let count = rand.next_i32_bounded(count + 1);
+    fn carve_from(&self, from_x: i32, from_z: i32, x: i32, z: i32, column: &mut ChunkBuffer, rand: &mut JavaRand, block_ids: &BlockIds) {
+        let count = rand.random_with::<i32>(Bound::new(40));
+        let bound = count + 1;
+        let count = rand.random_with::<i32>(Bound::new(bound));
+        let bound = count + 1;
+        let count = rand.random_with::<i32>(Bound::new(bound));
 
-        if rand.next_i32_bounded(15) != 0 {
+        if rand.random_with::<i32>(Bound::new(15)) != 0 {
             return;
         }
 
         for _ in 0..count {
+            let bound = CHUNK_WIDTH as i32;
+            let bound1 = CHUNK_WIDTH as i32;
             let start = DVec3::new(
-                (from_x * CHUNK_WIDTH as i32 + rand.next_i32_bounded(CHUNK_WIDTH as i32)) as f64,
+                (from_x * CHUNK_WIDTH as i32 + rand.random_with::<i32>(Bound::new(bound1))) as f64,
                 {
-                    let v = rand.next_i32_bounded(120);
-                    rand.next_i32_bounded(v + 8) as f64
+                    let v = rand.random_with::<i32>(Bound::new(120));
+                    let bound1 = v + 8;
+                    rand.random_with::<i32>(Bound::new(bound1)) as f64
                 },
-                (from_z * CHUNK_WIDTH as i32 + rand.next_i32_bounded(CHUNK_WIDTH as i32)) as f64,
+                (from_z * CHUNK_WIDTH as i32 + rand.random_with::<i32>(Bound::new(bound))) as f64,
             );
 
             let mut node_count = 1;
-            if rand.next_i32_bounded(4) == 0 {
-                let start_width = rand.next_float() * 6.0 + 1.0;
+            if rand.random_with::<i32>(Bound::new(4)) == 0 {
+                let start_width = rand.random::<f32>() * 6.0 + 1.0;
                 self.carve_node(x, z, column, rand, start, start_width, 0.0, 0.0, -1, -1, 0.5, block_ids);
-                node_count += rand.next_i32_bounded(4);
+                node_count += rand.random_with::<i32>(Bound::new(4));
             }
 
             for _ in 0..node_count {
-                let yaw = rand.next_float() * MC_PI * 2.0;
-                let pitch = (rand.next_float() - 0.5) * 2.0 / 8.0;
-                let start_width = rand.next_float() * 2.0 + rand.next_float();
+                let yaw = rand.random::<f32>() * MC_PI * 2.0;
+                let pitch = (rand.random::<f32>() - 0.5) * 2.0 / 8.0;
+                let start_width = rand.random::<f32>() * 2.0 + rand.random::<f32>();
                 self.carve_node(x, z, column, rand, start, start_width, yaw, pitch, 0, 0, 1.0, block_ids);
             }
         }
@@ -71,7 +73,7 @@ impl CaveCarver {
         &self,
         x: i32,
         z: i32,
-        column: &mut Column,
+        column: &mut ChunkBuffer,
         chunk_rand: &mut JavaRand,
         mut pos: DVec3,
         start_width: f32,
@@ -85,12 +87,13 @@ impl CaveCarver {
         let x_mid = (x * CHUNK_WIDTH as i32 + 8) as f64;
         let z_mid = (z * CHUNK_WIDTH as i32 + 8) as f64;
 
-        let mut rand = JavaRand::new(chunk_rand.next_i64());
+        let mut rand = JavaRand::new(chunk_rand.random::<i64>());
 
         // The length is the maximum length of the cave from start point to any end.
         if length <= 0 {
             let max_length = self.radius * CHUNK_WIDTH as i32 - CHUNK_WIDTH as i32;
-            length = max_length - rand.next_i32_bounded(max_length / 4);
+            let bound = max_length / 4;
+            length = max_length - rand.random_with::<i32>(Bound::new(bound));
         }
 
         // The offset is the current generation point in the length of the cave.
@@ -99,8 +102,9 @@ impl CaveCarver {
             offset = length / 2;
         }
 
-        let branch_offset = rand.next_i32_bounded(length / 2) + length / 4;
-        let stable_pitch = rand.next_i32_bounded(6) == 0;
+        let bound = length / 2;
+        let branch_offset = rand.random_with::<i32>(Bound::new(bound)) + length / 4;
+        let stable_pitch = rand.random_with::<i32>(Bound::new(6)) == 0;
 
         let mut pitch_scale = 0.0f32;
         let mut yaw_scale = 0.0f32;
@@ -124,8 +128,8 @@ impl CaveCarver {
             yaw += yaw_scale * 0.1;
             pitch_scale *= 0.9;
             yaw_scale *= 12.0 / 16.0;
-            pitch_scale += (rand.next_float() - rand.next_float()) * rand.next_float() * 2.0;
-            yaw_scale += (rand.next_float() - rand.next_float()) * rand.next_float() * 4.0;
+            pitch_scale += (rand.random::<f32>() - rand.random::<f32>()) * rand.random::<f32>() * 2.0;
+            yaw_scale += (rand.random::<f32>() - rand.random::<f32>()) * rand.random::<f32>() * 4.0;
 
             // Branch into two perpendicular tunnels at the branch point.
             if !auto_offset && offset == branch_offset && start_width > 1.0 {
@@ -135,7 +139,7 @@ impl CaveCarver {
                     column,
                     chunk_rand,
                     pos,
-                    rand.next_float() * 0.5 + 0.5,
+                    rand.random::<f32>() * 0.5 + 0.5,
                     yaw - MC_PI * 0.5,
                     pitch / 3.0,
                     offset,
@@ -149,7 +153,7 @@ impl CaveCarver {
                     column,
                     chunk_rand,
                     pos,
-                    rand.next_float() * 0.5 + 0.5,
+                    rand.random::<f32>() * 0.5 + 0.5,
                     yaw + MC_PI * 0.5,
                     pitch / 3.0,
                     offset,
@@ -160,7 +164,7 @@ impl CaveCarver {
                 return;
             }
 
-            if !auto_offset && rand.next_i32_bounded(4) == 0 {
+            if !auto_offset && rand.random_with::<i32>(Bound::new(4)) == 0 {
                 continue;
             }
 
@@ -227,7 +231,7 @@ impl CaveCarver {
                         }
 
                         let (bx, bz) = (bx as usize, bz as usize);
-                        
+
                         let carve_y = (by + 1) as usize;
                         let prev_id = column.get(bx, carve_y, bz);
 

@@ -4,7 +4,8 @@
 
 use glam::{DVec2, DVec3};
 
-use crate::level::generator::java_rand::JavaRand;
+use crate::rand::java::JavaRand;
+use crate::rand::primitives::Bound;
 
 #[derive(Clone, Debug)]
 pub struct PerlinNoise {
@@ -14,12 +15,13 @@ pub struct PerlinNoise {
 
 impl PerlinNoise {
     pub fn new(rand: &mut JavaRand) -> Self {
-        let offset = DVec3::new(rand.next_double(), rand.next_double(), rand.next_double()) * 256.0;
+        let offset = DVec3::new(rand.random::<f64>(), rand.random::<f64>(), rand.random::<f64>()) * 256.0;
 
         let mut permutations = Box::new(std::array::from_fn::<u16, 512, _>(|i| if i < 256 { i as u16 } else { 0 }));
 
         for index in 0usize..256 {
-            let swap_with = rand.next_i32_bounded(256 - index as i32) as usize + index;
+            let bound = 256 - index as i32;
+            let swap_with = rand.random_with::<i32>(Bound::new(bound)) as usize + index;
             permutations.swap(index, swap_with);
             permutations[index + 256] = permutations[index];
         }
@@ -212,9 +214,6 @@ fn gradient_flat(hash: u16, x: f64, z: f64) -> f64 {
     (if hash & 1 == 0 { u } else { -u }) + (if hash & 2 == 0 { v } else { -v })
 }
 
-/// Floors and returns the fade curve and wrapped permutation index for one axis. The
-/// manual floor (rather than `f64::floor`) preserves integer-overflow wraparound at
-/// extreme coordinates, which the reference generator relies on.
 fn axis_sample(pos: f64) -> (f64, f64, usize) {
     let floor = wrapping_floor(pos);
     let pos = pos - floor as f64;
@@ -227,9 +226,6 @@ fn wrapping_floor(pos: f64) -> i32 {
     if pos < truncated as f64 { truncated.wrapping_sub(1) } else { truncated }
 }
 
-/// A cruder floor than `wrapping_floor`: it's wrong at exactly 0.0 (returns -1, not 0).
-/// The reference generator's simplex noise relies on this exact quirk, so it's kept as
-/// its own function rather than reusing (or "fixing") `wrapping_floor`.
 fn fast_floor(pos: f64) -> i32 {
     let truncated = pos as i32;
     if pos > 0.0 { truncated } else { truncated.wrapping_sub(1) }

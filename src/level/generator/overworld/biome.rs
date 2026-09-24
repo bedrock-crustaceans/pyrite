@@ -17,7 +17,6 @@ pub enum Biome {
     Sky,
 }
 
-/// Picks a biome from temperature/humidity, each quantized to 64 steps (0..64).
 pub fn biome_from_climate(temperature_index: usize, humidity_index: usize) -> Biome {
     let temperature = temperature_index as f32 / 63.0;
     let humidity = humidity_index as f32 / 63.0 * temperature;

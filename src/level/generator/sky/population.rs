@@ -5,9 +5,9 @@ use crate::level::generator::shared::population::PopulationSource;
 pub use crate::level::generator::shared::population::{populate, populate_owner, populate_owner_isolated};
 use crate::rand::java::JavaRand;
 
-use super::{OverworldGenerator, chunk_seed, dungeon, lake, plant, snow, spring, tree, vein};
+use super::{SkyGenerator, chunk_seed, dungeon, lake, plant, snow, spring, tree, vein};
 
-impl PopulationSource for OverworldGenerator {
+impl PopulationSource for SkyGenerator {
     fn owner_population(&self, owner_x: i32, owner_z: i32) -> Arc<QuadChunkBuffer> {
         self.owner_population(owner_x, owner_z)
     }
