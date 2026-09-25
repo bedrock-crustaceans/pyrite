@@ -1,7 +1,7 @@
 use super::SkyGenerator;
-use super::quad_chunk_buffer::QuadChunkBuffer;
 use crate::level::generator::overworld::biome::Biome;
 use crate::level::generator::shared::plant::{place_cactus, place_plants, place_pumpkin, place_sugar_canes};
+use crate::level::generator::shared::quad_chunk_buffer::QuadChunkBuffer;
 use crate::level::generator::shared::vein::next_offset;
 use crate::rand::java::JavaRand;
 use crate::rand::primitives::Bound;

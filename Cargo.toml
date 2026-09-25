@@ -9,6 +9,6 @@ path = "src/lib.rs"
 [dependencies]
 bevy_app = "0.19.1"
 bevy_ecs = "0.19.1"
-chorus = { git = "https://github.com/bedrock-crustaceans/chorus.git" }
+chorus = { path = "../chorus" }
 tracing = "0.1.44"
 glam = "0.33.2"

@@ -1,12 +1,8 @@
+mod phases;
 mod plant;
 mod population;
 mod vein;
 
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-
-use chorus::level::chunk::Chunk;
-use chorus::level::generator::WorldGenerator;
 use chorus::registry::block_registry::BlockRegistry;
 use glam::{DVec2, DVec3};
 
@@ -15,8 +11,8 @@ use crate::level::generator::overworld::biome::{Biome, biome_from_climate};
 use crate::level::generator::shared::block_ids::BlockIds;
 use crate::level::generator::shared::cave::CaveCarver;
 use crate::level::generator::shared::chunk_buffer::ChunkBuffer;
-use crate::level::generator::shared::{BoundedCache, ClimateSource, SubChunkBlocks, TerrainSource, chunk_seed, insert_sub_chunk};
-use crate::level::generator::shared::{CAVE_RADIUS, CHUNK_HEIGHT, CHUNK_WIDTH, SUB_CHUNK_COUNT, SUB_CHUNK_SIZE, TERRAIN_CAVE_CACHE_CAPACITY, dungeon, lake, quad_chunk_buffer, snow, spring, tree};
+use crate::level::generator::shared::{CAVE_RADIUS, CHUNK_HEIGHT, CHUNK_WIDTH, dungeon, lake, snow, spring, tree};
+use crate::level::generator::shared::{ClimateSource, TerrainSource, chunk_seed};
 use crate::rand::java::JavaRand;
 use crate::rand::primitives::Bound;
 
@@ -58,22 +54,17 @@ pub struct SkyGenerator {
     low_noise: OctaveNoise,
     high_noise: OctaveNoise,
     blend_noise: OctaveNoise,
-    
+
     #[allow(dead_code)]
     sand_gravel_noise: OctaveNoise,
     thickness_noise: OctaveNoise,
-    
+
     #[allow(dead_code)]
     island_a_noise: OctaveNoise,
     #[allow(dead_code)]
     island_b_noise: OctaveNoise,
 
     feature_noise: OctaveNoise,
-
-    column_cache: Mutex<HashMap<(i64, i32, i32), Arc<ChunkBuffer>>>,
-    terrain_cave_cache: Mutex<BoundedCache<ChunkBuffer>>,
-    owner_population_cache: Mutex<BoundedCache<quad_chunk_buffer::QuadChunkBuffer>>,
-    owner_population_isolated_cache: Mutex<BoundedCache<quad_chunk_buffer::QuadChunkBuffer>>,
 }
 
 impl SkyGenerator {
@@ -103,11 +94,6 @@ impl SkyGenerator {
             island_a_noise: OctaveNoise::new(&mut rand, 10),
             island_b_noise: OctaveNoise::new(&mut rand, 16),
             feature_noise: OctaveNoise::new(&mut rand, 8),
-
-            column_cache: Mutex::new(HashMap::new()),
-            terrain_cave_cache: Mutex::new(BoundedCache::new(TERRAIN_CAVE_CACHE_CAPACITY)),
-            owner_population_cache: Mutex::new(BoundedCache::new(TERRAIN_CAVE_CACHE_CAPACITY)),
-            owner_population_isolated_cache: Mutex::new(BoundedCache::new(TERRAIN_CAVE_CACHE_CAPACITY)),
         }
     }
 
@@ -154,7 +140,7 @@ impl SkyGenerator {
 
         column
     }
-    
+
     fn climate_at(&self, x: i32, z: i32) -> (f64, f64, Biome) {
         let offset = DVec2::new(x as f64, z as f64);
 
@@ -173,91 +159,13 @@ impl SkyGenerator {
     fn biome_at(&self, x: i32, z: i32) -> Biome {
         self.climate_at(x, z).2
     }
-    
+
     fn feature_noise_at(&self, x: f64, z: f64) -> f64 {
         let mut value = [[[0.0f64; 1]; 1]; 1];
         self.feature_noise.sample_3d(&mut value, DVec3::new(x, z, 0.0), DVec3::ONE);
         value[0][0][0]
     }
 
-    fn build_column(&self, x: i32, z: i32) -> ChunkBuffer {
-        let mut column = (*self.terrain_and_caves(x, z)).clone();
-        population::populate(self, x, z, &mut column);
-        column
-    }
-
-    fn terrain_and_caves(&self, x: i32, z: i32) -> Arc<ChunkBuffer> {
-        let key = (self.seed, x, z);
-
-        if let Some(column) = self.terrain_cave_cache.lock().unwrap().get(&key) {
-            return column;
-        }
-
-        let mut column = self.build_terrain_column(x, z);
-        CaveCarver::new(CAVE_RADIUS).carve(self.seed, x, z, &mut column, &self.block_ids);
-        let column = Arc::new(column);
-
-        self.terrain_cave_cache.lock().unwrap().insert(key, column.clone());
-        column
-    }
-
-    fn owner_population(&self, owner_x: i32, owner_z: i32) -> Arc<quad_chunk_buffer::QuadChunkBuffer> {
-        let key = (self.seed, owner_x, owner_z);
-
-        if let Some(buffer) = self.owner_population_cache.lock().unwrap().get(&key) {
-            return buffer;
-        }
-
-        let buffer = Arc::new(population::populate_owner(self, owner_x, owner_z));
-        self.owner_population_cache.lock().unwrap().insert(key, buffer.clone());
-        buffer
-    }
-
-    fn owner_population_isolated(&self, owner_x: i32, owner_z: i32) -> Arc<quad_chunk_buffer::QuadChunkBuffer> {
-        let key = (self.seed, owner_x, owner_z);
-
-        if let Some(buffer) = self.owner_population_isolated_cache.lock().unwrap().get(&key) {
-            return buffer;
-        }
-
-        let buffer = Arc::new(population::populate_owner_isolated(self, owner_x, owner_z));
-        self.owner_population_isolated_cache.lock().unwrap().insert(key, buffer.clone());
-        buffer
-    }
-
-    fn column(&self, x: i32, z: i32) -> Arc<ChunkBuffer> {
-        let key = (self.seed, x, z);
-
-        if let Some(column) = self.column_cache.lock().unwrap().get(&key) {
-            return column.clone();
-        }
-
-        let column = Arc::new(self.build_column(x, z));
-        self.column_cache.lock().unwrap().insert(key, column.clone());
-        column
-    }
-
-    fn forget_column(&self, x: i32, z: i32) {
-        self.column_cache.lock().unwrap().remove(&(self.seed, x, z));
-    }
-
-    pub fn generate_sub_chunk(&self, x: i32, sub_y: i8, z: i32) -> SubChunkBlocks {
-        let column = self.column(x, z);
-
-        let base_y = sub_y as usize * SUB_CHUNK_SIZE;
-        let mut blocks = [[[0i32; SUB_CHUNK_SIZE]; SUB_CHUNK_SIZE]; SUB_CHUNK_SIZE];
-
-        for (lx, plane) in blocks.iter_mut().enumerate() {
-            for (ly, row) in plane.iter_mut().enumerate() {
-                for (lz, block_id) in row.iter_mut().enumerate() {
-                    *block_id = column.get(lx, base_y + ly, lz);
-                }
-            }
-        }
-
-        SubChunkBlocks { blocks }
-    }
-    
     fn build_density_field(&self, x: i32, z: i32) -> DensityField {
         let world_offset_2d = DVec2::new((x * INTERP_GRID_SIZE as i32) as f64, (z * INTERP_GRID_SIZE as i32) as f64);
         let world_offset_3d = DVec3::new(world_offset_2d.x, 0.0, world_offset_2d.y);
@@ -315,7 +223,7 @@ impl SkyGenerator {
 
         density
     }
-    
+
     fn sample_surface_fields(&self, x: i32, z: i32) -> SurfaceField {
         const SURFACE_SCALE: f64 = 1.0 / 32.0;
 
@@ -344,9 +252,31 @@ impl SkyGenerator {
     }
 }
 
+// Decoration reads terrain through this - always a fresh, uncached computation, same as any
+// other out-of-quad read during population.
 impl TerrainSource for SkyGenerator {
-    fn terrain_and_caves(&self, x: i32, z: i32) -> Arc<ChunkBuffer> {
-        self.terrain_and_caves(x, z)
+    fn raw_terrain(&self, x: i32, z: i32) -> ChunkBuffer {
+        self.build_terrain_column(x, z)
+    }
+
+    fn carve_caves(&self, x: i32, z: i32, column: &mut ChunkBuffer) {
+        CaveCarver::new(CAVE_RADIUS).carve(self.seed, x, z, column, &self.block_ids);
+    }
+
+    fn min_sub_chunk_y(&self) -> i8 {
+        -4
+    }
+
+    fn dimension_sub_chunk_count(&self) -> usize {
+        24
+    }
+
+    fn air_id(&self) -> i32 {
+        self.block_ids.air
+    }
+
+    fn biome(&self) -> i32 {
+        1
     }
 }
 
@@ -463,16 +393,5 @@ fn carve_column(column: &mut ChunkBuffer, lx: usize, lz: usize, biome: Biome, su
                 }
             }
         }
-    }
-}
-
-impl WorldGenerator for SkyGenerator {
-    fn generate(&self, _registry: &BlockRegistry, x: i32, z: i32, chunk: &mut Chunk) {
-        for sub_y in 0..SUB_CHUNK_COUNT as i8 {
-            let sub_chunk = self.generate_sub_chunk(x, sub_y, z);
-            insert_sub_chunk(chunk, sub_y, &sub_chunk);
-        }
-
-        self.forget_column(x, z);
     }
 }

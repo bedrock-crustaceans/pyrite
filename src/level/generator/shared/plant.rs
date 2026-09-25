@@ -32,9 +32,9 @@ pub fn place_plants<T: TerrainSource>(
     for _ in 0..count {
         let place_pos = pos
             + IVec3::new(
-            rand.random_with::<i32>(Bound::new(8)) - rand.random_with::<i32>(Bound::new(8)),
-            rand.random_with::<i32>(Bound::new(4)) - rand.random_with::<i32>(Bound::new(4)),
-            rand.random_with::<i32>(Bound::new(8)) - rand.random_with::<i32>(Bound::new(8)),
+                rand.random_with::<i32>(Bound::new(8)) - rand.random_with::<i32>(Bound::new(8)),
+                rand.random_with::<i32>(Bound::new(4)) - rand.random_with::<i32>(Bound::new(4)),
+                rand.random_with::<i32>(Bound::new(8)) - rand.random_with::<i32>(Bound::new(8)),
             );
 
         if read(generator, buffer, place_pos.x, place_pos.y, place_pos.z) != block_ids.air {
@@ -54,9 +54,9 @@ pub fn place_sugar_canes(generator: &impl TerrainSource, buffer: &mut QuadChunkB
     for _ in 0..20 {
         let place_pos = pos
             + IVec3::new(
-            rand.random_with::<i32>(Bound::new(4)) - rand.random_with::<i32>(Bound::new(4)),
-            0,
-            rand.random_with::<i32>(Bound::new(4)) - rand.random_with::<i32>(Bound::new(4)),
+                rand.random_with::<i32>(Bound::new(4)) - rand.random_with::<i32>(Bound::new(4)),
+                0,
+                rand.random_with::<i32>(Bound::new(4)) - rand.random_with::<i32>(Bound::new(4)),
             );
 
         if read(generator, buffer, place_pos.x, place_pos.y, place_pos.z) != block_ids.air {
@@ -94,9 +94,9 @@ pub fn place_pumpkin(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffe
     for _ in 0..64 {
         let place_pos = pos
             + IVec3::new(
-            rand.random_with::<i32>(Bound::new(8)) - rand.random_with::<i32>(Bound::new(8)),
-            rand.random_with::<i32>(Bound::new(4)) - rand.random_with::<i32>(Bound::new(4)),
-            rand.random_with::<i32>(Bound::new(8)) - rand.random_with::<i32>(Bound::new(8)),
+                rand.random_with::<i32>(Bound::new(8)) - rand.random_with::<i32>(Bound::new(8)),
+                rand.random_with::<i32>(Bound::new(4)) - rand.random_with::<i32>(Bound::new(4)),
+                rand.random_with::<i32>(Bound::new(8)) - rand.random_with::<i32>(Bound::new(8)),
             );
 
         if read(generator, buffer, place_pos.x, place_pos.y, place_pos.z) != block_ids.air {
@@ -119,9 +119,9 @@ pub fn place_cactus(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer
     for _ in 0..10 {
         let place_pos = pos
             + IVec3::new(
-            rand.random_with::<i32>(Bound::new(8)) - rand.random_with::<i32>(Bound::new(8)),
-            rand.random_with::<i32>(Bound::new(4)) - rand.random_with::<i32>(Bound::new(4)),
-            rand.random_with::<i32>(Bound::new(8)) - rand.random_with::<i32>(Bound::new(8)),
+                rand.random_with::<i32>(Bound::new(8)) - rand.random_with::<i32>(Bound::new(8)),
+                rand.random_with::<i32>(Bound::new(4)) - rand.random_with::<i32>(Bound::new(4)),
+                rand.random_with::<i32>(Bound::new(8)) - rand.random_with::<i32>(Bound::new(8)),
             );
 
         if read(generator, buffer, place_pos.x, place_pos.y, place_pos.z) != block_ids.air {

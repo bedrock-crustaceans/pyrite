@@ -25,13 +25,13 @@ pub fn populate_from(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffe
         let bound1 = CHUNK_WIDTH as i32;
         let pos = origin
             + IVec3::new(
-            rand.random_with::<i32>(Bound::new(bound1)) + 8,
-            {
+                rand.random_with::<i32>(Bound::new(bound1)) + 8,
+                {
                     let v = rand.random_with::<i32>(Bound::new(120));
                     let bound1 = v + 8;
                     rand.random_with::<i32>(Bound::new(bound1))
                 },
-            rand.random_with::<i32>(Bound::new(bound)) + 8,
+                rand.random_with::<i32>(Bound::new(bound)) + 8,
             );
 
         if pos.y < 64 || rand.random_with::<i32>(Bound::new(10)) == 0 {

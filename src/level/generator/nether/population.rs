@@ -1,11 +1,8 @@
-use std::sync::Arc;
-
 use glam::IVec3;
 
 use super::{BlockIds, CHUNK_HEIGHT, CHUNK_WIDTH, NetherGenerator, chunk_seed};
+use crate::level::generator::shared::phases::Population;
 use crate::level::generator::shared::quad_chunk_buffer::{QuadChunkBuffer, read, write};
-use crate::level::generator::shared::population::PopulationSource;
-pub use crate::level::generator::shared::population::{populate, populate_owner, populate_owner_isolated};
 use crate::rand::java::JavaRand;
 use crate::rand::primitives::Bound;
 
@@ -18,16 +15,8 @@ const FACE_NEIGHBORS: [IVec3; 6] = [
     IVec3::new(0, 0, 1),
 ];
 
-impl PopulationSource for NetherGenerator {
-    fn owner_population(&self, owner_x: i32, owner_z: i32) -> Arc<QuadChunkBuffer> {
-        self.owner_population(owner_x, owner_z)
-    }
-
-    fn owner_population_isolated(&self, owner_x: i32, owner_z: i32) -> Arc<QuadChunkBuffer> {
-        self.owner_population_isolated(owner_x, owner_z)
-    }
-
-    fn run_population(&self, owner_x: i32, owner_z: i32, buffer: &mut QuadChunkBuffer) {
+impl Population for NetherGenerator {
+    fn run_population_raw(&self, owner_x: i32, owner_z: i32, buffer: &mut QuadChunkBuffer) {
         let mut rand = JavaRand::new(chunk_seed(self.seed, owner_x, owner_z));
         let origin = IVec3::new(owner_x * CHUNK_WIDTH as i32, 0, owner_z * CHUNK_WIDTH as i32);
         let block_ids = &self.block_ids;
@@ -122,9 +111,9 @@ fn place_fire(generator: &NetherGenerator, buffer: &mut QuadChunkBuffer, block_i
     for _ in 0..64 {
         let target = pos
             + IVec3::new(
-            rand.random_with::<i32>(Bound::new(8)) - rand.random_with::<i32>(Bound::new(8)),
-            rand.random_with::<i32>(Bound::new(4)) - rand.random_with::<i32>(Bound::new(4)),
-            rand.random_with::<i32>(Bound::new(8)) - rand.random_with::<i32>(Bound::new(8)),
+                rand.random_with::<i32>(Bound::new(8)) - rand.random_with::<i32>(Bound::new(8)),
+                rand.random_with::<i32>(Bound::new(4)) - rand.random_with::<i32>(Bound::new(4)),
+                rand.random_with::<i32>(Bound::new(8)) - rand.random_with::<i32>(Bound::new(8)),
             );
 
         if read(generator, buffer, target.x, target.y, target.z) == block_ids.air && read(generator, buffer, target.x, target.y - 1, target.z) == block_ids.netherrack {
@@ -146,9 +135,9 @@ fn place_glowstone_cluster(generator: &NetherGenerator, buffer: &mut QuadChunkBu
     for _ in 0..1500 {
         let target = pos
             + IVec3::new(
-            rand.random_with::<i32>(Bound::new(8)) - rand.random_with::<i32>(Bound::new(8)),
-            -rand.random_with::<i32>(Bound::new(12)),
-            rand.random_with::<i32>(Bound::new(8)) - rand.random_with::<i32>(Bound::new(8)),
+                rand.random_with::<i32>(Bound::new(8)) - rand.random_with::<i32>(Bound::new(8)),
+                -rand.random_with::<i32>(Bound::new(12)),
+                rand.random_with::<i32>(Bound::new(8)) - rand.random_with::<i32>(Bound::new(8)),
             );
 
         if read(generator, buffer, target.x, target.y, target.z) != block_ids.air {
@@ -173,9 +162,9 @@ fn place_mushroom(generator: &NetherGenerator, buffer: &mut QuadChunkBuffer, blo
     for _ in 0..64 {
         let target = pos
             + IVec3::new(
-            rand.random_with::<i32>(Bound::new(8)) - rand.random_with::<i32>(Bound::new(8)),
-            rand.random_with::<i32>(Bound::new(4)) - rand.random_with::<i32>(Bound::new(4)),
-            rand.random_with::<i32>(Bound::new(8)) - rand.random_with::<i32>(Bound::new(8)),
+                rand.random_with::<i32>(Bound::new(8)) - rand.random_with::<i32>(Bound::new(8)),
+                rand.random_with::<i32>(Bound::new(4)) - rand.random_with::<i32>(Bound::new(4)),
+                rand.random_with::<i32>(Bound::new(8)) - rand.random_with::<i32>(Bound::new(8)),
             );
 
         if read(generator, buffer, target.x, target.y, target.z) == block_ids.air && can_place_mushroom(generator, buffer, block_ids, target) {

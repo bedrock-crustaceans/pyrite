@@ -53,9 +53,9 @@ pub fn populate_ores(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffe
         let bound1 = CHUNK_WIDTH as i32;
         let pos = origin
             + IVec3::new(
-            rand.random_with::<i32>(Bound::new(bound1)),
-            rand.random_with::<i32>(Bound::new(16)) + rand.random_with::<i32>(Bound::new(16)),
-            rand.random_with::<i32>(Bound::new(bound)),
+                rand.random_with::<i32>(Bound::new(bound1)),
+                rand.random_with::<i32>(Bound::new(16)) + rand.random_with::<i32>(Bound::new(16)),
+                rand.random_with::<i32>(Bound::new(bound)),
             );
         place_vein(generator, buffer, block_ids.stone, block_ids.lapis_ore, 6, pos, rand);
     }

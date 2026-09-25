@@ -1,19 +1,14 @@
 mod cave;
+mod phases;
 mod population;
 
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-
 use chorus::block::block_id;
-use chorus::level::chunk::Chunk;
-use chorus::level::generator::WorldGenerator;
 use chorus::registry::block_registry::BlockRegistry;
 use glam::{DVec2, DVec3};
 
 use crate::level::generator::noise::octave::OctaveNoise;
 use crate::level::generator::shared::chunk_buffer::ChunkBuffer;
-use crate::level::generator::shared::{BoundedCache, SubChunkBlocks, TerrainSource, chunk_seed, insert_sub_chunk};
-use crate::level::generator::shared::{CAVE_RADIUS, CHUNK_HEIGHT, CHUNK_WIDTH, SUB_CHUNK_COUNT, SUB_CHUNK_SIZE, TERRAIN_CAVE_CACHE_CAPACITY, chunk_buffer, quad_chunk_buffer};
+use crate::level::generator::shared::{CAVE_RADIUS, CHUNK_HEIGHT, CHUNK_WIDTH, TerrainSource, chunk_seed};
 use crate::rand::java::JavaRand;
 
 use crate::rand::primitives::Bound;
@@ -76,11 +71,6 @@ pub struct NetherGenerator {
     blend_noise: OctaveNoise,
     sand_gravel_noise: OctaveNoise,
     thickness_noise: OctaveNoise,
-
-    column_cache: Mutex<HashMap<(i64, i32, i32), Arc<ChunkBuffer>>>,
-    terrain_cave_cache: Mutex<BoundedCache<ChunkBuffer>>,
-    owner_population_cache: Mutex<BoundedCache<quad_chunk_buffer::QuadChunkBuffer>>,
-    owner_population_isolated_cache: Mutex<BoundedCache<quad_chunk_buffer::QuadChunkBuffer>>,
 }
 
 impl NetherGenerator {
@@ -104,11 +94,6 @@ impl NetherGenerator {
             blend_noise: OctaveNoise::new(&mut rand, 8),
             sand_gravel_noise: OctaveNoise::new(&mut rand, 4),
             thickness_noise: OctaveNoise::new(&mut rand, 4),
-
-            column_cache: Mutex::new(HashMap::new()),
-            terrain_cave_cache: Mutex::new(BoundedCache::new(TERRAIN_CAVE_CACHE_CAPACITY)),
-            owner_population_cache: Mutex::new(BoundedCache::new(TERRAIN_CAVE_CACHE_CAPACITY)),
-            owner_population_isolated_cache: Mutex::new(BoundedCache::new(TERRAIN_CAVE_CACHE_CAPACITY)),
         }
     }
 
@@ -125,84 +110,6 @@ impl NetherGenerator {
         column
     }
 
-    fn build_column(&self, x: i32, z: i32) -> ChunkBuffer {
-        let mut column = (*self.terrain_and_caves(x, z)).clone();
-        population::populate(self, x, z, &mut column);
-        column
-    }
-
-    fn terrain_and_caves(&self, x: i32, z: i32) -> Arc<ChunkBuffer> {
-        let key = (self.seed, x, z);
-
-        if let Some(column) = self.terrain_cave_cache.lock().unwrap().get(&key) {
-            return column;
-        }
-
-        let mut column = self.build_terrain_column(x, z);
-        CaveCarver::new(CAVE_RADIUS).carve(self.seed, x, z, &mut column, &self.block_ids);
-        let column = Arc::new(column);
-
-        self.terrain_cave_cache.lock().unwrap().insert(key, column.clone());
-        column
-    }
-
-    fn owner_population(&self, owner_x: i32, owner_z: i32) -> Arc<quad_chunk_buffer::QuadChunkBuffer> {
-        let key = (self.seed, owner_x, owner_z);
-
-        if let Some(buffer) = self.owner_population_cache.lock().unwrap().get(&key) {
-            return buffer;
-        }
-
-        let buffer = Arc::new(population::populate_owner(self, owner_x, owner_z));
-        self.owner_population_cache.lock().unwrap().insert(key, buffer.clone());
-        buffer
-    }
-
-    fn owner_population_isolated(&self, owner_x: i32, owner_z: i32) -> Arc<quad_chunk_buffer::QuadChunkBuffer> {
-        let key = (self.seed, owner_x, owner_z);
-
-        if let Some(buffer) = self.owner_population_isolated_cache.lock().unwrap().get(&key) {
-            return buffer;
-        }
-
-        let buffer = Arc::new(population::populate_owner_isolated(self, owner_x, owner_z));
-        self.owner_population_isolated_cache.lock().unwrap().insert(key, buffer.clone());
-        buffer
-    }
-
-    fn column(&self, x: i32, z: i32) -> Arc<ChunkBuffer> {
-        let key = (self.seed, x, z);
-
-        if let Some(column) = self.column_cache.lock().unwrap().get(&key) {
-            return column.clone();
-        }
-
-        let column = Arc::new(self.build_column(x, z));
-        self.column_cache.lock().unwrap().insert(key, column.clone());
-        column
-    }
-
-    fn forget_column(&self, x: i32, z: i32) {
-        self.column_cache.lock().unwrap().remove(&(self.seed, x, z));
-    }
-
-    pub fn generate_sub_chunk(&self, x: i32, sub_y: i8, z: i32) -> SubChunkBlocks {
-        let column = self.column(x, z);
-
-        let base_y = sub_y as usize * SUB_CHUNK_SIZE;
-        let mut blocks = [[[0i32; SUB_CHUNK_SIZE]; SUB_CHUNK_SIZE]; SUB_CHUNK_SIZE];
-
-        for (lx, plane) in blocks.iter_mut().enumerate() {
-            for (ly, row) in plane.iter_mut().enumerate() {
-                for (lz, block_id) in row.iter_mut().enumerate() {
-                    *block_id = column.get(lx, base_y + ly, lz);
-                }
-            }
-        }
-
-        SubChunkBlocks { blocks }
-    }
-    
     #[allow(clippy::needless_range_loop)]
     fn build_density_field(&self, x: i32, z: i32) -> DensityField {
         let world_offset_2d = DVec2::new((x * INTERP_GRID_SIZE as i32) as f64, (z * INTERP_GRID_SIZE as i32) as f64);
@@ -304,9 +211,31 @@ impl NetherGenerator {
     }
 }
 
+// Decoration reads terrain through this - always a fresh, uncached computation, same as any
+// other out-of-quad read during population.
 impl TerrainSource for NetherGenerator {
-    fn terrain_and_caves(&self, x: i32, z: i32) -> Arc<ChunkBuffer> {
-        self.terrain_and_caves(x, z)
+    fn raw_terrain(&self, x: i32, z: i32) -> ChunkBuffer {
+        self.build_terrain_column(x, z)
+    }
+
+    fn carve_caves(&self, x: i32, z: i32, column: &mut ChunkBuffer) {
+        CaveCarver::new(CAVE_RADIUS).carve(self.seed, x, z, column, &self.block_ids);
+    }
+
+    fn min_sub_chunk_y(&self) -> i8 {
+        -4
+    }
+
+    fn dimension_sub_chunk_count(&self) -> usize {
+        24
+    }
+
+    fn air_id(&self) -> i32 {
+        self.block_ids.air
+    }
+
+    fn biome(&self) -> i32 {
+        1
     }
 }
 
@@ -426,16 +355,5 @@ fn carve_column(column: &mut ChunkBuffer, lx: usize, lz: usize, has_soul_sand: b
                 column.set(lx, y as usize, lz, filler_id);
             }
         }
-    }
-}
-
-impl WorldGenerator for NetherGenerator {
-    fn generate(&self, _registry: &BlockRegistry, x: i32, z: i32, chunk: &mut Chunk) {
-        for sub_y in 0..SUB_CHUNK_COUNT as i8 {
-            let sub_chunk = self.generate_sub_chunk(x, sub_y, z);
-            insert_sub_chunk(chunk, sub_y, &sub_chunk);
-        }
-
-        self.forget_column(x, z);
     }
 }

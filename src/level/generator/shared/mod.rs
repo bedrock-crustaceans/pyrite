@@ -8,18 +8,19 @@ pub mod cave;
 pub mod chunk_buffer;
 pub mod dungeon;
 pub mod lake;
-pub mod quad_chunk_buffer;
+pub mod phases;
 pub mod plant;
 pub mod population;
+pub mod quad_chunk_buffer;
 pub mod snow;
 pub mod spring;
 pub mod tree;
 pub mod vein;
 
-use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
 use chorus::level::chunk::Chunk;
+use chorus::level::sub_chunk::SubChunk;
 use glam::IVec3;
 
 use crate::level::generator::overworld::biome::Biome;
@@ -33,11 +34,26 @@ pub const CHUNK_HEIGHT: usize = 128;
 pub const SUB_CHUNK_SIZE: usize = 16;
 pub const SUB_CHUNK_COUNT: usize = CHUNK_HEIGHT / SUB_CHUNK_SIZE;
 pub const CAVE_RADIUS: i32 = 8;
-pub const TERRAIN_CAVE_CACHE_CAPACITY: usize = 256;
 pub const SNOW_TEMPERATURE_REFERENCE_HEIGHT: i32 = 64;
 
 pub trait TerrainSource {
-    fn terrain_and_caves(&self, x: i32, z: i32) -> Arc<ChunkBuffer>;
+    /// Terrain shape only - density fields, surface - with no caves carved into it yet.
+    fn raw_terrain(&self, x: i32, z: i32) -> ChunkBuffer;
+    /// Carves caves into an already-built terrain column, in place.
+    fn carve_caves(&self, x: i32, z: i32, column: &mut ChunkBuffer);
+
+    /// The column decoration actually reads: terrain with caves carved into it. A default method
+    /// composing the two above - a dimension only implements the two building blocks, not this.
+    fn terrain_and_caves(&self, x: i32, z: i32) -> Arc<ChunkBuffer> {
+        let mut column = self.raw_terrain(x, z);
+        self.carve_caves(x, z, &mut column);
+        Arc::new(column)
+    }
+
+    fn min_sub_chunk_y(&self) -> i8;
+    fn dimension_sub_chunk_count(&self) -> usize;
+    fn air_id(&self) -> i32;
+    fn biome(&self) -> i32;
 }
 
 pub trait ClimateSource {
@@ -60,45 +76,21 @@ pub struct SubChunkBlocks {
     pub blocks: [[[i32; SUB_CHUNK_SIZE]; SUB_CHUNK_SIZE]; SUB_CHUNK_SIZE],
 }
 
-pub struct BoundedCache<V> {
-    capacity: usize,
-    order: VecDeque<(i64, i32, i32)>,
-    entries: HashMap<(i64, i32, i32), Arc<V>>,
-}
-
-impl<V> BoundedCache<V> {
-    pub fn new(capacity: usize) -> Self {
-        Self {
-            capacity,
-            order: VecDeque::new(),
-            entries: HashMap::new(),
-        }
-    }
-
-    pub fn get(&self, key: &(i64, i32, i32)) -> Option<Arc<V>> {
-        self.entries.get(key).cloned()
-    }
-
-    pub fn insert(&mut self, key: (i64, i32, i32), value: Arc<V>) {
-        if self.entries.insert(key, value).is_none() {
-            self.order.push_back(key);
-            if self.order.len() > self.capacity
-                && let Some(oldest) = self.order.pop_front()
-            {
-                self.entries.remove(&oldest);
-            }
-        }
-    }
-}
-
-pub fn insert_sub_chunk(chunk: &mut Chunk, sub_y: i8, sub_chunk: &SubChunkBlocks) {
-    let base_y = sub_y as i32 * SUB_CHUNK_SIZE as i32;
-
+/// Bulk-loads a whole sub-chunk's worth of blocks in one shot. Building the palette via 4096
+/// individual `chunk.set_block()` calls (going through `SubChunk::set()`'s incremental,
+/// in-game-edit-oriented path each time) is measurably more expensive than this for freshly
+/// generated data - see `Palette::from_blocks`.
+pub fn insert_sub_chunk(chunk: &mut Chunk, sub_y: i8, sub_chunk: &SubChunkBlocks, air_id: i32, biome: i32) {
+    let mut blocks = [0i32; 4096];
     for (lx, plane) in sub_chunk.blocks.iter().enumerate() {
         for (ly, row) in plane.iter().enumerate() {
             for (lz, &block_id) in row.iter().enumerate() {
-                chunk.set_block(lx as u8, base_y + ly as i32, lz as u8, 0, block_id);
+                blocks[SubChunk::index(lx as u8, ly as u8, lz as u8)] = block_id;
             }
         }
+    }
+
+    if let Some(existing) = chunk.get_sub_chunk_mut(sub_y) {
+        *existing = SubChunk::from_blocks(&blocks, air_id, biome);
     }
 }

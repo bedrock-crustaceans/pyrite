@@ -2,7 +2,7 @@ use crate::level::generator::overworld::OverworldGenerator;
 use crate::level::generator::seed::parse_seed;
 use bevy_ecs::prelude::Res;
 use bevy_ecs::system::ResMut;
-use chorus::level::dimension::Dimension;
+use chorus::level::generator::dimension::Dimension;
 use chorus::level::level::Level;
 use chorus::registry::block_registry::BlockRegistry;
 use tracing::info;

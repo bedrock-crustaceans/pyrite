@@ -1,8 +1,8 @@
 use glam::{DVec3, IVec3};
 
-use super::chunk_buffer::ChunkBuffer;
 use super::{BlockIds, CHUNK_HEIGHT, CHUNK_WIDTH, chunk_seed};
 use crate::level::generator::math::{MC_PI, mc_sin, mc_sin_cos};
+use crate::level::generator::shared::chunk_buffer::ChunkBuffer;
 use crate::rand::java::JavaRand;
 use crate::rand::primitives::Bound;
 

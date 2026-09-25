@@ -11,7 +11,11 @@ pub struct QuadChunkBuffer {
 impl QuadChunkBuffer {
     pub fn new(generator: &impl TerrainSource, owner_x: i32, owner_z: i32) -> Self {
         let columns = std::array::from_fn(|dx| std::array::from_fn(|dz| (*generator.terrain_and_caves(owner_x + dx as i32, owner_z + dz as i32)).clone()));
-        Self { x: owner_x, z: owner_z, chunks: columns }
+        Self {
+            x: owner_x,
+            z: owner_z,
+            chunks: columns,
+        }
     }
 
     pub fn column(&self, cx: i32, cz: i32) -> Option<&ChunkBuffer> {
