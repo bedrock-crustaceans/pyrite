@@ -12,3 +12,7 @@ bevy_ecs = "0.19.1"
 chorus = { path = "../chorus" }
 tracing = "0.1.44"
 glam = "0.33.2"
+
+[profile.samply]
+inherits = "release"
+debug = true

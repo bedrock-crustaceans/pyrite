@@ -66,11 +66,11 @@ pub struct NetherGenerator {
     pub seed: i64,
     block_ids: BlockIds,
 
-    low_noise: OctaveNoise,
-    high_noise: OctaveNoise,
-    blend_noise: OctaveNoise,
-    sand_gravel_noise: OctaveNoise,
-    thickness_noise: OctaveNoise,
+    low_noise: OctaveNoise<16>,
+    high_noise: OctaveNoise<16>,
+    blend_noise: OctaveNoise<8>,
+    sand_gravel_noise: OctaveNoise<4>,
+    thickness_noise: OctaveNoise<4>,
 }
 
 impl NetherGenerator {
@@ -89,11 +89,11 @@ impl NetherGenerator {
             // reference itself. Skipping their *construction* too is safe only
             // because they're last in the reference's own construction order, so
             // nothing built afterward depends on the RNG state they'd have consumed.
-            low_noise: OctaveNoise::new(&mut rand, 16),
-            high_noise: OctaveNoise::new(&mut rand, 16),
-            blend_noise: OctaveNoise::new(&mut rand, 8),
-            sand_gravel_noise: OctaveNoise::new(&mut rand, 4),
-            thickness_noise: OctaveNoise::new(&mut rand, 4),
+            low_noise: OctaveNoise::new(&mut rand),
+            high_noise: OctaveNoise::new(&mut rand),
+            blend_noise: OctaveNoise::new(&mut rand),
+            sand_gravel_noise: OctaveNoise::new(&mut rand),
+            thickness_noise: OctaveNoise::new(&mut rand),
         }
     }
 

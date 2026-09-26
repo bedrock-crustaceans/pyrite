@@ -9,7 +9,7 @@ use glam::IVec3;
 
 pub fn populate_from(generator: &SkyGenerator, buffer: &mut QuadChunkBuffer, owner_x: i32, owner_z: i32, rand: &mut JavaRand) {
     let origin = IVec3::new(owner_x * super::CHUNK_WIDTH as i32, 0, owner_z * super::CHUNK_WIDTH as i32);
-    let biome = generator.biome_at(origin.x + 16, origin.z + 16);
+    let (_, _, biome) = generator.climate_at(origin.x + 16, origin.z + 16);
     let block_ids = &generator.block_ids;
 
     for _ in 0..2 {

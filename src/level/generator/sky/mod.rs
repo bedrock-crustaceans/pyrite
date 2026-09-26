@@ -7,12 +7,12 @@ use chorus::registry::block_registry::BlockRegistry;
 use glam::{DVec2, DVec3};
 
 use crate::level::generator::noise::octave::OctaveNoise;
-use crate::level::generator::overworld::biome::{Biome, biome_from_climate};
+use crate::level::generator::overworld::biome::{biome_from_climate, Biome};
 use crate::level::generator::shared::block_ids::BlockIds;
 use crate::level::generator::shared::cave::CaveCarver;
 use crate::level::generator::shared::chunk_buffer::ChunkBuffer;
-use crate::level::generator::shared::{CAVE_RADIUS, CHUNK_HEIGHT, CHUNK_WIDTH, dungeon, lake, snow, spring, tree};
-use crate::level::generator::shared::{ClimateSource, TerrainSource, chunk_seed};
+use crate::level::generator::shared::{chunk_seed, ClimateSource, TerrainSource};
+use crate::level::generator::shared::{dungeon, lake, snow, spring, tree, CAVE_RADIUS, CHUNK_HEIGHT, CHUNK_WIDTH};
 use crate::rand::java::JavaRand;
 use crate::rand::primitives::Bound;
 
@@ -47,57 +47,68 @@ pub struct SkyGenerator {
     pub seed: i64,
     block_ids: BlockIds,
 
-    temperature_noise: OctaveNoise,
-    humidity_noise: OctaveNoise,
-    biome_noise: OctaveNoise,
+    temperature_noise: OctaveNoise<4>,
+    humidity_noise: OctaveNoise<4>,
+    biome_noise: OctaveNoise<2>,
 
-    low_noise: OctaveNoise,
-    high_noise: OctaveNoise,
-    blend_noise: OctaveNoise,
+    low_noise: OctaveNoise<16>,
+    high_noise: OctaveNoise<16>,
+    blend_noise: OctaveNoise<8>,
+    thickness_noise: OctaveNoise<4>,
 
-    #[allow(dead_code)]
-    sand_gravel_noise: OctaveNoise,
-    thickness_noise: OctaveNoise,
-
-    #[allow(dead_code)]
-    island_a_noise: OctaveNoise,
-    #[allow(dead_code)]
-    island_b_noise: OctaveNoise,
-
-    feature_noise: OctaveNoise,
+    feature_noise: OctaveNoise<8>,
 }
 
 impl SkyGenerator {
     pub fn new(seed: i64, registry: &BlockRegistry) -> Self {
+        let block_ids = BlockIds::resolve(registry);
+
         let mut rand = JavaRand::new(seed);
+
+        let temperature_noise = OctaveNoise::new(&mut JavaRand::new(seed.wrapping_mul(9871)));
+        let humidity_noise = OctaveNoise::new(&mut JavaRand::new(seed.wrapping_mul(39811)));
+        let biome_noise = OctaveNoise::new(&mut JavaRand::new(seed.wrapping_mul(543321)));
+
+        let low_noise = OctaveNoise::new(&mut rand);
+        let high_noise = OctaveNoise::new(&mut rand);
+        let blend_noise = OctaveNoise::new(&mut rand);
+
+        // sand_gravel_noise
+        let _: OctaveNoise<4> = OctaveNoise::new(&mut rand);
+
+        let thickness_noise = OctaveNoise::new(&mut rand);
+
+        // island_a_noise
+        let _: OctaveNoise<10> = OctaveNoise::new(&mut rand);
+        // island_b_noise
+        let _: OctaveNoise<16> = OctaveNoise::new(&mut rand);
+
+        let feature_noise = OctaveNoise::new(&mut rand);
 
         Self {
             seed,
-            block_ids: BlockIds::resolve(registry),
+            block_ids,
 
-            temperature_noise: OctaveNoise::new(&mut JavaRand::new(seed.wrapping_mul(9871)), 4),
-            humidity_noise: OctaveNoise::new(&mut JavaRand::new(seed.wrapping_mul(39811)), 4),
-            biome_noise: OctaveNoise::new(&mut JavaRand::new(seed.wrapping_mul(543321)), 2),
+            temperature_noise,
+            humidity_noise,
+            biome_noise,
 
-            // Construction order matters (each draws from the same `rand`) - matches
-            // `ChunkProviderSky`'s own field order exactly. Two of its 8 fields (a 10-
-            // and a 16-octave "island" pair, sampled but never actually read - traced
-            // through `generateTerrain`'s `var29`/`var36`, both dead) are still
-            // constructed here even though their sampled output is never used, since
-            // `feature_noise` (tree-count noise) is constructed after them and needs
-            // the RNG left in the right place.
-            low_noise: OctaveNoise::new(&mut rand, 16),
-            high_noise: OctaveNoise::new(&mut rand, 16),
-            blend_noise: OctaveNoise::new(&mut rand, 8),
-            sand_gravel_noise: OctaveNoise::new(&mut rand, 4),
-            thickness_noise: OctaveNoise::new(&mut rand, 4),
-            island_a_noise: OctaveNoise::new(&mut rand, 10),
-            island_b_noise: OctaveNoise::new(&mut rand, 16),
-            feature_noise: OctaveNoise::new(&mut rand, 8),
+            low_noise,
+            high_noise,
+            blend_noise,
+            thickness_noise,
+
+            feature_noise,
         }
     }
 
-    fn generate_biomes(&self, x: i32, z: i32, temperature_grid: &mut ClimateField, humidity_grid: &mut ClimateField) -> BiomeGrid {
+    fn generate_biomes(
+        &self,
+        x: i32,
+        z: i32,
+        temperature_grid: &mut ClimateField,
+        humidity_grid: &mut ClimateField
+    ) -> BiomeGrid {
         let world_offset = DVec2::new((x * CHUNK_WIDTH as i32) as f64, (z * CHUNK_WIDTH as i32) as f64);
 
         let mut biome_noise_grid: ClimateField = [[0.0; CHUNK_WIDTH]; CHUNK_WIDTH];
@@ -154,10 +165,6 @@ impl SkyGenerator {
         self.biome_noise.sample_simplex_2d(&mut biome_noise, offset, DVec2::splat(BIOME_SCALE), BIOME_FREQUENCY_FACTOR);
 
         classify_climate(temperature[0][0], humidity[0][0], biome_noise[0][0])
-    }
-
-    fn biome_at(&self, x: i32, z: i32) -> Biome {
-        self.climate_at(x, z).2
     }
 
     fn feature_noise_at(&self, x: f64, z: f64) -> f64 {

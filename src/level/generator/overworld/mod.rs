@@ -47,19 +47,19 @@ pub struct OverworldGenerator {
     pub seed: i64,
     block_ids: BlockIds,
 
-    temperature_noise: OctaveNoise,
-    humidity_noise: OctaveNoise,
-    biome_noise: OctaveNoise,
+    temperature_noise: OctaveNoise<4>,
+    humidity_noise: OctaveNoise<4>,
+    biome_noise: OctaveNoise<2>,
 
-    terrain_noise_0: OctaveNoise,
-    terrain_noise_1: OctaveNoise,
-    terrain_noise_2: OctaveNoise,
-    terrain_noise_3: OctaveNoise,
-    terrain_noise_4: OctaveNoise,
+    terrain_noise_0: OctaveNoise<16>,
+    terrain_noise_1: OctaveNoise<16>,
+    terrain_noise_2: OctaveNoise<8>,
+    terrain_noise_3: OctaveNoise<10>,
+    terrain_noise_4: OctaveNoise<16>,
 
-    sand_gravel_noise: OctaveNoise,
-    thickness_noise: OctaveNoise,
-    feature_noise: OctaveNoise,
+    sand_gravel_noise: OctaveNoise<4>,
+    thickness_noise: OctaveNoise<4>,
+    feature_noise: OctaveNoise<8>,
 }
 
 impl OverworldGenerator {
@@ -70,20 +70,20 @@ impl OverworldGenerator {
             seed,
             block_ids: BlockIds::resolve(registry),
 
-            temperature_noise: OctaveNoise::new(&mut JavaRand::new(seed.wrapping_mul(9871)), 4),
-            humidity_noise: OctaveNoise::new(&mut JavaRand::new(seed.wrapping_mul(39811)), 4),
-            biome_noise: OctaveNoise::new(&mut JavaRand::new(seed.wrapping_mul(543321)), 2),
+            temperature_noise: OctaveNoise::new(&mut JavaRand::new(seed.wrapping_mul(9871))),
+            humidity_noise: OctaveNoise::new(&mut JavaRand::new(seed.wrapping_mul(39811))),
+            biome_noise: OctaveNoise::new(&mut JavaRand::new(seed.wrapping_mul(543321))),
 
-            terrain_noise_0: OctaveNoise::new(&mut rand, 16),
-            terrain_noise_1: OctaveNoise::new(&mut rand, 16),
-            terrain_noise_2: OctaveNoise::new(&mut rand, 8),
+            terrain_noise_0: OctaveNoise::new(&mut rand),
+            terrain_noise_1: OctaveNoise::new(&mut rand),
+            terrain_noise_2: OctaveNoise::new(&mut rand),
 
-            sand_gravel_noise: OctaveNoise::new(&mut rand, 4),
-            thickness_noise: OctaveNoise::new(&mut rand, 4),
+            sand_gravel_noise: OctaveNoise::new(&mut rand),
+            thickness_noise: OctaveNoise::new(&mut rand),
 
-            terrain_noise_3: OctaveNoise::new(&mut rand, 10),
-            terrain_noise_4: OctaveNoise::new(&mut rand, 16),
-            feature_noise: OctaveNoise::new(&mut rand, 8),
+            terrain_noise_3: OctaveNoise::new(&mut rand),
+            terrain_noise_4: OctaveNoise::new(&mut rand),
+            feature_noise: OctaveNoise::new(&mut rand),
         }
     }
 
