@@ -5,12 +5,12 @@
 //! whole pipeline - what each phase requires, and what it actually does - is readable end to end
 //! in that one file, without jumping through shared generic plumbing to follow it.
 
-use chorus::level::chunk::Chunk;
-use chorus::level::generator::pos::ChunkPos;
-
+use super::TerrainSource;
 use super::chunk_buffer::ChunkBuffer;
 use super::quad_chunk_buffer::QuadChunkBuffer;
-use super::{SUB_CHUNK_COUNT, SUB_CHUNK_SIZE, SubChunkBlocks, TerrainSource, insert_sub_chunk};
+use chorus::level::chunk::Chunk;
+use chorus::level::generator::pos::ChunkPos;
+use chorus::level::sub_chunk::SubChunk;
 
 /// A dimension's generator provides its own decoration pass over an owner's forward quad on top
 /// of `TerrainSource` (raw terrain+cave generation, plus the fixed config needed to build the
@@ -38,29 +38,26 @@ pub fn forward_quad(owner: ChunkPos) -> Vec<ChunkPos> {
 /// Assembles a fully-decorated column into the Bedrock-protocol `Chunk` shape. The same for every
 /// dimension - it's just copying already-computed blocks into sub-chunks, nothing generator- or
 /// phase-specific about it.
-pub fn assemble_chunk(generator: &impl TerrainSource, cell: ChunkPos, column: &ChunkBuffer) -> Chunk {
-    let mut chunk = Chunk::new(
-        cell.x,
-        cell.z,
-        generator.min_sub_chunk_y(),
-        generator.dimension_sub_chunk_count(),
-        generator.air_id(),
-        generator.biome(),
-    );
+pub fn assemble_chunk(generator: &impl TerrainSource, cell: ChunkPos, column: ChunkBuffer) -> Chunk {
+    let air_id = generator.air_id();
+    let biome = generator.biome();
 
-    for sub_y in 0..SUB_CHUNK_COUNT as i8 {
-        let base_y = sub_y as usize * SUB_CHUNK_SIZE;
-        let mut blocks = [[[0i32; SUB_CHUNK_SIZE]; SUB_CHUNK_SIZE]; SUB_CHUNK_SIZE];
+    let mut chunk = Chunk::new(cell.x, cell.z, generator.min_sub_chunk_y(), generator.dimension_sub_chunk_count(), air_id, biome);
 
-        for (lx, plane) in blocks.iter_mut().enumerate() {
-            for (ly, row) in plane.iter_mut().enumerate() {
-                for (lz, block_id) in row.iter_mut().enumerate() {
-                    *block_id = column.get(lx, base_y + ly, lz);
+    let sub_chunks = column.take();
+    for (sub_y, blocks) in sub_chunks.iter().enumerate() {
+        let mut flat = [0i32; 4096];
+        for (lx, plane) in blocks.iter().enumerate() {
+            for (ly, row) in plane.iter().enumerate() {
+                for (lz, id) in row.iter().enumerate() {
+                    flat[SubChunk::index(lx as u8, ly as u8, lz as u8)] = *id;
                 }
             }
         }
 
-        insert_sub_chunk(&mut chunk, sub_y, &SubChunkBlocks { blocks }, generator.air_id(), generator.biome());
+        if let Some(existing) = chunk.get_sub_chunk_mut(sub_y as i8) {
+            *existing = SubChunk::from_blocks(&flat, air_id, biome);
+        }
     }
 
     chunk

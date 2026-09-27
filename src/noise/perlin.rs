@@ -1,5 +1,5 @@
-use std::array;
 use glam::{DVec2, DVec3};
+use std::array;
 
 use crate::rand::java::JavaRand;
 use crate::rand::primitives::Bound;
@@ -7,18 +7,14 @@ use crate::rand::primitives::Bound;
 #[derive(Clone, Debug)]
 pub struct PerlinNoise {
     offset: DVec3,
-    permutations: Box<[u16; 512]>,
+    permutations: Box<[u8; 512]>,
 }
 
 impl PerlinNoise {
     pub fn new(rand: &mut JavaRand) -> Self {
-        let offset = DVec3::new(
-            rand.random::<f64>(),
-            rand.random::<f64>(),
-            rand.random::<f64>()
-        ) * 256.0;
+        let offset = DVec3::new(rand.random::<f64>(), rand.random::<f64>(), rand.random::<f64>()) * 256.0;
 
-        let mut permutations = Box::new(array::from_fn::<u16, 512, _>(|i| if i < 256 { i as u16 } else { 0 }));
+        let mut permutations = Box::new(array::from_fn::<u8, 512, _>(|i| if i < 256 { i as u8 } else { 0 }));
 
         for index in 0usize..256 {
             let bound = 256 - index as i32;
@@ -188,21 +184,21 @@ fn lerp(t: f64, from: f64, to: f64) -> f64 {
 }
 
 #[inline(always)]
-fn gradient(hash: u16, x: f64, y: f64, z: f64) -> f64 {
+fn gradient(hash: u8, x: f64, y: f64, z: f64) -> f64 {
     match hash & 15 {
-        0  =>  x + y,
-        1  => -x + y,
-        2  =>  x - y,
-        3  => -x - y,
-        4  =>  x + z,
-        5  => -x + z,
-        6  =>  x - z,
-        7  => -x - z,
-        8  =>  y + z,
-        9  => -y + z,
-        10 =>  y - z,
+        0 => x + y,
+        1 => -x + y,
+        2 => x - y,
+        3 => -x - y,
+        4 => x + z,
+        5 => -x + z,
+        6 => x - z,
+        7 => -x - z,
+        8 => y + z,
+        9 => -y + z,
+        10 => y - z,
         11 => -y - z,
-        12 =>  x + y,
+        12 => x + y,
         13 => -y + z,
         14 => -x + y,
         15 => -y - z,
@@ -212,22 +208,22 @@ fn gradient(hash: u16, x: f64, y: f64, z: f64) -> f64 {
 }
 
 #[inline(always)]
-fn gradient_flat(hash: u16, x: f64, z: f64) -> f64 {
+fn gradient_flat(hash: u8, x: f64, z: f64) -> f64 {
     match hash & 15 {
-        0  =>  x,
-        2  =>  x,
-        1  => -x,
-        3  => -x,
-        4  =>  x + z,
-        5  => -x + z,
-        6  =>  x - z,
-        7  => -x - z,
-        8  =>  z,
-        9  =>  z,
+        0 => x,
+        2 => x,
+        1 => -x,
+        3 => -x,
+        4 => x + z,
+        5 => -x + z,
+        6 => x - z,
+        7 => -x - z,
+        8 => z,
+        9 => z,
         10 => -z,
         11 => -z,
-        12 =>  x,
-        13 =>  z,
+        12 => x,
+        13 => z,
         14 => -x,
         15 => -z,
         // SAFETY: mask guarantees a value between 0 and 15, which are all matched
@@ -240,7 +236,7 @@ fn axis_sample(pos: f64) -> (f64, f64, usize) {
     let floor = pos.floor();
     let frac = pos - floor;
 
-    let fade_inner = (frac * 6.0) -15.0;
+    let fade_inner = (frac * 6.0) - 15.0;
     let fade_mid = (frac * fade_inner) + 10.0;
     let fade = frac * frac * frac * fade_mid;
 
@@ -252,9 +248,18 @@ fn axis_sample(pos: f64) -> (f64, f64, usize) {
 #[inline(always)]
 fn simplex_corner(delta_x: f64, delta_z: f64, corner: usize) -> f64 {
     const CORNER_VECTORS: [(f64, f64); 12] = [
-        (1.0, 1.0), (-1.0, 1.0), (1.0, -1.0), (-1.0, -1.0),
-        (1.0, 0.0), (-1.0, 0.0), (1.0, 0.0), (-1.0, 0.0),
-        (0.0, 1.0), (0.0, -1.0), (0.0, 1.0), (0.0, -1.0),
+        (1.0, 1.0),
+        (-1.0, 1.0),
+        (1.0, -1.0),
+        (-1.0, -1.0),
+        (1.0, 0.0),
+        (-1.0, 0.0),
+        (1.0, 0.0),
+        (-1.0, 0.0),
+        (0.0, 1.0),
+        (0.0, -1.0),
+        (0.0, 1.0),
+        (0.0, -1.0),
     ];
 
     let falloff = 0.5 - (delta_x * delta_x) - (delta_z * delta_z);

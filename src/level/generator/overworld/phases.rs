@@ -170,8 +170,8 @@ impl Phase<OverworldGenerator> for ChunkPhase {
     }
 
     fn run(generator: &OverworldGenerator, cell: ChunkPos, inputs: &PhaseInputs<OverworldGenerator>) -> Self::Output {
-        let column = inputs.get::<ColumnPhase>(cell);
-        assemble_chunk(generator, cell, &column)
+        let column = inputs.get::<ColumnPhase>(cell).as_ref().clone();
+        assemble_chunk(generator, cell, column)
     }
 }
 

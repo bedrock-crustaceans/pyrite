@@ -6,13 +6,13 @@ mod vein;
 use chorus::registry::block_registry::BlockRegistry;
 use glam::{DVec2, DVec3};
 
-use crate::level::generator::noise::octave::OctaveNoise;
-use crate::level::generator::overworld::biome::{biome_from_climate, Biome};
+use crate::level::generator::overworld::biome::{Biome, biome_from_climate};
 use crate::level::generator::shared::block_ids::BlockIds;
 use crate::level::generator::shared::cave::CaveCarver;
 use crate::level::generator::shared::chunk_buffer::ChunkBuffer;
-use crate::level::generator::shared::{chunk_seed, ClimateSource, TerrainSource};
-use crate::level::generator::shared::{dungeon, lake, snow, spring, tree, CAVE_RADIUS, CHUNK_HEIGHT, CHUNK_WIDTH};
+use crate::level::generator::shared::{CAVE_RADIUS, CHUNK_HEIGHT, CHUNK_WIDTH, dungeon, lake, snow, spring, tree};
+use crate::level::generator::shared::{ClimateSource, TerrainSource, chunk_seed};
+use crate::noise::octave::OctaveNoise;
 use crate::rand::java::JavaRand;
 use crate::rand::primitives::Bound;
 
@@ -102,13 +102,7 @@ impl SkyGenerator {
         }
     }
 
-    fn generate_biomes(
-        &self,
-        x: i32,
-        z: i32,
-        temperature_grid: &mut ClimateField,
-        humidity_grid: &mut ClimateField
-    ) -> BiomeGrid {
+    fn generate_biomes(&self, x: i32, z: i32, temperature_grid: &mut ClimateField, humidity_grid: &mut ClimateField) -> BiomeGrid {
         let world_offset = DVec2::new((x * CHUNK_WIDTH as i32) as f64, (z * CHUNK_WIDTH as i32) as f64);
 
         let mut biome_noise_grid: ClimateField = [[0.0; CHUNK_WIDTH]; CHUNK_WIDTH];

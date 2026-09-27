@@ -6,9 +6,9 @@ use chorus::block::block_id;
 use chorus::registry::block_registry::BlockRegistry;
 use glam::{DVec2, DVec3};
 
-use crate::level::generator::noise::octave::OctaveNoise;
 use crate::level::generator::shared::chunk_buffer::ChunkBuffer;
 use crate::level::generator::shared::{CAVE_RADIUS, CHUNK_HEIGHT, CHUNK_WIDTH, TerrainSource, chunk_seed};
+use crate::noise::octave::OctaveNoise;
 use crate::rand::java::JavaRand;
 
 use crate::rand::primitives::Bound;

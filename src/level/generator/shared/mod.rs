@@ -19,8 +19,6 @@ pub mod vein;
 
 use std::sync::Arc;
 
-use chorus::level::chunk::Chunk;
-use chorus::level::sub_chunk::SubChunk;
 use glam::IVec3;
 
 use crate::level::generator::overworld::biome::Biome;
@@ -74,23 +72,4 @@ pub fn chunk_seed(world_seed: i64, x: i32, z: i32) -> i64 {
 
 pub struct SubChunkBlocks {
     pub blocks: [[[i32; SUB_CHUNK_SIZE]; SUB_CHUNK_SIZE]; SUB_CHUNK_SIZE],
-}
-
-/// Bulk-loads a whole sub-chunk's worth of blocks in one shot. Building the palette via 4096
-/// individual `chunk.set_block()` calls (going through `SubChunk::set()`'s incremental,
-/// in-game-edit-oriented path each time) is measurably more expensive than this for freshly
-/// generated data - see `Palette::from_blocks`.
-pub fn insert_sub_chunk(chunk: &mut Chunk, sub_y: i8, sub_chunk: &SubChunkBlocks, air_id: i32, biome: i32) {
-    let mut blocks = [0i32; 4096];
-    for (lx, plane) in sub_chunk.blocks.iter().enumerate() {
-        for (ly, row) in plane.iter().enumerate() {
-            for (lz, &block_id) in row.iter().enumerate() {
-                blocks[SubChunk::index(lx as u8, ly as u8, lz as u8)] = block_id;
-            }
-        }
-    }
-
-    if let Some(existing) = chunk.get_sub_chunk_mut(sub_y) {
-        *existing = SubChunk::from_blocks(&blocks, air_id, biome);
-    }
 }

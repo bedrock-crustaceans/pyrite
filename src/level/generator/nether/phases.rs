@@ -2,12 +2,11 @@
 //! shared with the other dimensions, so this dimension's whole pipeline - what each phase
 //! requires, and what it actually does - is readable end to end in this one file.
 
-use std::sync::Arc;
-
 use chorus::level::chunk::Chunk;
 use chorus::level::generator::dimension::Generator;
 use chorus::level::generator::phase::{Phase, PhaseInputs, Requirement, requirement, same_cell};
 use chorus::level::generator::pos::ChunkPos;
+use std::sync::Arc;
 
 use super::NetherGenerator;
 use crate::level::generator::shared::TerrainSource;
@@ -145,10 +144,7 @@ impl Phase<NetherGenerator> for ColumnPhase {
     type Output = ChunkBuffer;
 
     fn requires() -> Vec<Requirement<NetherGenerator>> {
-        vec![
-            requirement::<NetherGenerator, CavesPhase>(same_cell),
-            requirement::<NetherGenerator, OwnerPopulationPhase>(owner_quad),
-        ]
+        vec![requirement::<NetherGenerator, CavesPhase>(same_cell), requirement::<NetherGenerator, OwnerPopulationPhase>(owner_quad)]
     }
 
     fn run(generator: &NetherGenerator, cell: ChunkPos, inputs: &PhaseInputs<NetherGenerator>) -> Self::Output {
@@ -170,8 +166,8 @@ impl Phase<NetherGenerator> for ChunkPhase {
     }
 
     fn run(generator: &NetherGenerator, cell: ChunkPos, inputs: &PhaseInputs<NetherGenerator>) -> Self::Output {
-        let column = inputs.get::<ColumnPhase>(cell);
-        assemble_chunk(generator, cell, &column)
+        let column = inputs.get::<ColumnPhase>(cell).as_ref().clone();
+        assemble_chunk(generator, cell, column)
     }
 }
 

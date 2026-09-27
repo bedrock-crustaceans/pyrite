@@ -1,7 +1,7 @@
-use std::array;
 use glam::{DVec2, DVec3};
+use std::array;
 
-use crate::level::generator::noise::perlin::PerlinNoise;
+use crate::noise::perlin::PerlinNoise;
 use crate::rand::java::JavaRand;
 
 #[derive(Clone, Debug)]
@@ -11,42 +11,44 @@ pub struct OctaveNoise<const N: usize> {
 
 impl<const N: usize> OctaveNoise<N> {
     pub fn new(rand: &mut JavaRand) -> Self {
-        Self { octaves: Box::new(array::from_fn::<_, N, _>(|_| PerlinNoise::new(rand))) }
+        Self {
+            octaves: Box::new(array::from_fn::<_, N, _>(|_| PerlinNoise::new(rand))),
+        }
     }
 
     pub fn sample_3d<const W: usize, const H: usize>(&self, grid: &mut [[[f64; W]; H]; W], offset: DVec3, scale: DVec3) {
-        *grid = [[[0.0; W]; H]; W];
+        grid.as_flattened_mut().as_flattened_mut().fill(0.0);
         let mut frequency = 1.0;
-        for octave in &*self.octaves {
+        for octave in self.octaves.iter() {
             octave.add_3d(grid, offset, scale * frequency, 1.0 / frequency);
             frequency /= 2.0;
         }
     }
 
     pub fn sample_2d<const W: usize>(&self, grid: &mut [[f64; W]; W], offset: DVec2, scale: DVec2) {
-        *grid = [[0.0; W]; W];
+        grid.as_flattened_mut().fill(0.0);
         let mut frequency = 1.0;
-        for octave in &*self.octaves {
+        for octave in self.octaves.iter() {
             octave.add_2d(grid, offset, scale * frequency, 1.0 / frequency);
             frequency /= 2.0;
         }
     }
 
     pub fn sample_3d_slice<const W: usize>(&self, grid: &mut [[f64; W]; W], offset: DVec2, scale: f64) {
-        *grid = [[0.0; W]; W];
+        grid.as_flattened_mut().fill(0.0);
         let mut frequency = 1.0;
-        for octave in &*self.octaves {
+        for octave in self.octaves.iter() {
             octave.add_3d_slice(grid, offset, scale * frequency, 1.0 / frequency);
             frequency /= 2.0;
         }
     }
 
     pub fn sample_simplex_2d<const W: usize>(&self, grid: &mut [[f64; W]; W], offset: DVec2, scale: DVec2, frequency_factor: f64) {
-        *grid = [[0.0; W]; W];
+        grid.as_flattened_mut().fill(0.0);
         let scale = scale / 1.5;
         let mut frequency = 1.0;
         let mut amplitude = 0.55;
-        for octave in &*self.octaves {
+        for octave in self.octaves.iter() {
             octave.add_simplex_2d(grid, offset, scale * frequency, amplitude);
             frequency *= frequency_factor;
             amplitude *= 2.0;

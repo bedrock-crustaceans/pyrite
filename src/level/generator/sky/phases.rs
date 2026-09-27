@@ -167,8 +167,8 @@ impl Phase<SkyGenerator> for ChunkPhase {
     }
 
     fn run(generator: &SkyGenerator, cell: ChunkPos, inputs: &PhaseInputs<SkyGenerator>) -> Self::Output {
-        let column = inputs.get::<ColumnPhase>(cell);
-        assemble_chunk(generator, cell, &column)
+        let column = inputs.get::<ColumnPhase>(cell).as_ref().clone();
+        assemble_chunk(generator, cell, column)
     }
 }
 

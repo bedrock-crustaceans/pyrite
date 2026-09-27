@@ -6,7 +6,6 @@ mod vein;
 use chorus::registry::block_registry::BlockRegistry;
 use glam::{DVec2, DVec3};
 
-use crate::level::generator::noise::octave::OctaveNoise;
 use crate::level::generator::overworld::biome::{Biome, biome_from_climate};
 use crate::level::generator::shared::block_ids::BlockIds;
 use crate::level::generator::shared::cave::CaveCarver;
@@ -15,6 +14,7 @@ use crate::level::generator::shared::phases::Population;
 use crate::level::generator::shared::quad_chunk_buffer::QuadChunkBuffer;
 use crate::level::generator::shared::{CAVE_RADIUS, CHUNK_HEIGHT, CHUNK_WIDTH, dungeon, lake, snow, spring, tree};
 use crate::level::generator::shared::{ClimateSource, TerrainSource, chunk_seed};
+use crate::noise::octave::OctaveNoise;
 use crate::rand::java::JavaRand;
 use crate::rand::primitives::Bound;
 
