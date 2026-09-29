@@ -1,7 +1,7 @@
 use glam::IVec3;
 
 use super::block_ids::BlockIds;
-use super::quad_chunk_buffer::{QuadChunkBuffer, read, write};
+use super::quad_chunk_buffer::{QuadChunkBuffer, column_at, read};
 use super::{CHUNK_WIDTH, HORIZONTAL_FACES, TerrainSource};
 use crate::rand::java::JavaRand;
 use crate::rand::primitives::Bound;
@@ -38,14 +38,16 @@ pub fn populate_from(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffe
 }
 
 fn place_spring(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, fluid_id: i32, pos: IVec3) {
-    if read(generator, buffer, pos.x, pos.y + 1, pos.z) != block_ids.stone {
+    let column = column_at(pos.x, pos.z);
+
+    if column.read(generator, buffer, pos.y + 1) != block_ids.stone {
         return;
     }
-    if read(generator, buffer, pos.x, pos.y - 1, pos.z) != block_ids.stone {
+    if column.read(generator, buffer, pos.y - 1) != block_ids.stone {
         return;
     }
 
-    let here = read(generator, buffer, pos.x, pos.y, pos.z);
+    let here = column.read(generator, buffer, pos.y);
     if here != block_ids.air && here != block_ids.stone {
         return;
     }
@@ -63,6 +65,6 @@ fn place_spring(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, bl
     }
 
     if stone_count == 3 && air_count == 1 {
-        write(buffer, pos.x, pos.y, pos.z, fluid_id);
+        column.write(buffer, pos.y, fluid_id);
     }
 }

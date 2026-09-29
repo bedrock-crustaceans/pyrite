@@ -1,13 +1,9 @@
-//! Infrastructure and population features shared by more than one dimension's
-//! generator. Only genuinely identical (or near-identical, parameterized) logic lives
-//! here - each dimension keeps its own terrain/surface generation and whichever
-//! population features it actually diverges on.
-
 pub mod block_ids;
 pub mod cave;
 pub mod chunk_buffer;
 pub mod dungeon;
 pub mod lake;
+pub mod phase_value;
 pub mod phases;
 pub mod plant;
 pub mod population;
@@ -35,13 +31,9 @@ pub const CAVE_RADIUS: i32 = 8;
 pub const SNOW_TEMPERATURE_REFERENCE_HEIGHT: i32 = 64;
 
 pub trait TerrainSource {
-    /// Terrain shape only - density fields, surface - with no caves carved into it yet.
     fn raw_terrain(&self, x: i32, z: i32) -> ChunkBuffer;
-    /// Carves caves into an already-built terrain column, in place.
     fn carve_caves(&self, x: i32, z: i32, column: &mut ChunkBuffer);
 
-    /// The column decoration actually reads: terrain with caves carved into it. A default method
-    /// composing the two above - a dimension only implements the two building blocks, not this.
     fn terrain_and_caves(&self, x: i32, z: i32) -> Arc<ChunkBuffer> {
         let mut column = self.raw_terrain(x, z);
         self.carve_caves(x, z, &mut column);
@@ -68,8 +60,4 @@ pub fn chunk_seed(world_seed: i64, x: i32, z: i32) -> i64 {
     let x_mul = rand.random::<i64>().wrapping_div(2).wrapping_mul(2).wrapping_add(1);
     let z_mul = rand.random::<i64>().wrapping_div(2).wrapping_mul(2).wrapping_add(1);
     i64::wrapping_add((x as i64).wrapping_mul(x_mul), (z as i64).wrapping_mul(z_mul)) ^ world_seed
-}
-
-pub struct SubChunkBlocks {
-    pub blocks: [[[i32; SUB_CHUNK_SIZE]; SUB_CHUNK_SIZE]; SUB_CHUNK_SIZE],
 }

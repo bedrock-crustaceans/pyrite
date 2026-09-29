@@ -1,12 +1,9 @@
-// Every loop index here also feeds into an offset/array-index calculation, not just
-// `fill`'s own indexing, so clippy's iterator rewrite doesn't apply - see perlin.rs's
-// identical situation/comment.
 #![allow(clippy::needless_range_loop)]
 
 use glam::{DVec3, IVec3};
 
 use super::block_ids::BlockIds;
-use super::quad_chunk_buffer::{QuadChunkBuffer, read, write};
+use super::quad_chunk_buffer::{QuadChunkBuffer, column_at, read};
 use super::vein::next_offset;
 use super::{CHUNK_WIDTH, TerrainSource};
 use crate::rand::java::JavaRand;
@@ -57,7 +54,6 @@ fn place_lake(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, bloc
     }
     pos.y -= 4;
 
-    // [X][Z][Y], matching the reference's own indexing.
     let mut fill = [[[false; 8]; 16]; 16];
 
     let count = rand.random_with::<i32>(Bound::new(4)) + 4;
@@ -90,10 +86,10 @@ fn place_lake(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, bloc
 
     for dx in 0..16usize {
         for dz in 0..16usize {
+            let column = column_at(pos.x + dx as i32, pos.z + dz as i32);
             for dy in 0..8usize {
                 if is_edge(&fill, dx, dz, dy) {
-                    let check_pos = pos + IVec3::new(dx as i32, dy as i32, dz as i32);
-                    let check_id = read(generator, buffer, check_pos.x, check_pos.y, check_pos.z);
+                    let check_id = column.read(generator, buffer, pos.y + dy as i32);
                     if (dy >= 4 && is_fluid(block_ids, check_id)) || (dy < 4 && !is_solid(block_ids, check_id) && check_id != fluid_id) {
                         return false;
                     }
@@ -104,28 +100,24 @@ fn place_lake(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, bloc
 
     for dx in 0..16usize {
         for dz in 0..16usize {
+            let column = column_at(pos.x + dx as i32, pos.z + dz as i32);
             for dy in 0..8usize {
                 if fill[dx][dz][dy] {
-                    let place_pos = pos + IVec3::new(dx as i32, dy as i32, dz as i32);
                     let id = if dy >= 4 { block_ids.air } else { fluid_id };
-                    write(buffer, place_pos.x, place_pos.y, place_pos.z, id);
+                    column.write(buffer, pos.y + dy as i32, id);
                 }
             }
         }
     }
 
-    // The reference only converts dirt at the lake's rim to grass where it also sees
-    // sky light - chorus has no lighting engine yet to ask, so this always converts,
-    // which is right for the common case (a rim exposed to open air) and only wrong
-    // for the rarer case of a lake basin covered by an overhang. Cosmetic only: no
-    // RNG is involved here, so it can't affect anything placed after this feature.
     for dx in 0..16usize {
         for dz in 0..16usize {
+            let column = column_at(pos.x + dx as i32, pos.z + dz as i32);
             for dy in 4..8usize {
                 if fill[dx][dz][dy] {
-                    let below = pos + IVec3::new(dx as i32, dy as i32 - 1, dz as i32);
-                    if read(generator, buffer, below.x, below.y, below.z) == block_ids.dirt {
-                        write(buffer, below.x, below.y, below.z, block_ids.grass);
+                    let below_y = pos.y + dy as i32 - 1;
+                    if column.read(generator, buffer, below_y) == block_ids.dirt {
+                        column.write(buffer, below_y, block_ids.grass);
                     }
                 }
             }
@@ -135,12 +127,12 @@ fn place_lake(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, bloc
     if fluid_id == block_ids.lava_still {
         for dx in 0..16usize {
             for dz in 0..16usize {
+                let column = column_at(pos.x + dx as i32, pos.z + dz as i32);
                 for dy in 0..8usize {
                     if is_edge(&fill, dx, dz, dy) && (dy < 4 || rand.random_with::<i32>(Bound::new(2)) != 0) {
-                        let place_pos = pos + IVec3::new(dx as i32, dy as i32, dz as i32);
-                        let id = read(generator, buffer, place_pos.x, place_pos.y, place_pos.z);
+                        let id = column.read(generator, buffer, pos.y + dy as i32);
                         if is_solid(block_ids, id) {
-                            write(buffer, place_pos.x, place_pos.y, place_pos.z, block_ids.stone);
+                            column.write(buffer, pos.y + dy as i32, block_ids.stone);
                         }
                     }
                 }

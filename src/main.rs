@@ -5,5 +5,7 @@ use chorus::level::level::Level;
 use pyrite::level::insert_level;
 
 fn main() {
-    Chorus::init().add_systems(Startup, insert_level.after(Level::init)).run();
+    let mut app = Chorus::init();
+    app.add_systems(Startup, insert_level.after(Level::init));
+    app.run();
 }

@@ -122,11 +122,9 @@ impl OverworldGenerator {
         let mut humidity_grid: ClimateField = [[0.0; CHUNK_WIDTH]; CHUNK_WIDTH];
 
         let biome_grid = self.generate_biomes(x, z, &mut temperature_grid, &mut humidity_grid);
-
         self.generate_terrain(x, z, &mut column, &temperature_grid, &humidity_grid, block_ids);
 
         let mut rand = JavaRand::new(i64::wrapping_add((x as i64).wrapping_mul(341873128712), (z as i64).wrapping_mul(132897987541)));
-
         self.generate_surface(x, z, &mut column, &biome_grid, &mut rand, block_ids);
 
         column

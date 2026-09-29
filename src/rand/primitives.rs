@@ -32,7 +32,7 @@ impl JavaRandType for i32 {
                         let bound = bound as i32;
                         let bits = rand.bits::<31>() as i32;
                         let val = bits % bound;
-                        if bits - val + (bound - 1) >= 0 {
+                        if bits.wrapping_sub(val).wrapping_add(bound - 1) >= 0 {
                             break val;
                         }
                     },

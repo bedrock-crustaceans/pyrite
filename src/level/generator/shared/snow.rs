@@ -1,7 +1,7 @@
 use glam::IVec3;
 
 use super::block_ids::BlockIds;
-use super::quad_chunk_buffer::{QuadChunkBuffer, read, write};
+use super::quad_chunk_buffer::{ColumnCursor, QuadChunkBuffer, column_at};
 use super::{CHUNK_HEIGHT, CHUNK_WIDTH, ClimateSource, SNOW_TEMPERATURE_REFERENCE_HEIGHT, TerrainSource};
 
 pub fn populate_from<G: TerrainSource + ClimateSource>(generator: &G, buffer: &mut QuadChunkBuffer, owner_x: i32, owner_z: i32, block_ids: &BlockIds) {
@@ -11,8 +11,9 @@ pub fn populate_from<G: TerrainSource + ClimateSource>(generator: &G, buffer: &m
         let wx = origin.x + 8 + dx;
         for dz in 0..CHUNK_WIDTH as i32 {
             let wz = origin.z + 8 + dz;
+            let column = column_at(wx, wz);
 
-            let Some(height) = top_solid_or_liquid_height(generator, buffer, block_ids, wx, wz) else {
+            let Some(height) = top_solid_or_liquid_height(generator, buffer, block_ids, &column) else {
                 continue;
             };
             if !(1..CHUNK_HEIGHT as i32).contains(&height) {
@@ -25,23 +26,23 @@ pub fn populate_from<G: TerrainSource + ClimateSource>(generator: &G, buffer: &m
                 continue;
             }
 
-            if read(generator, buffer, wx, height, wz) != block_ids.air {
+            if column.read(generator, buffer, height) != block_ids.air {
                 continue;
             }
 
-            let below = read(generator, buffer, wx, height - 1, wz);
+            let below = column.read(generator, buffer, height - 1);
             if !is_solid_ground(block_ids, below) {
                 continue;
             }
 
-            write(buffer, wx, height, wz, block_ids.snow_layer);
+            column.write(buffer, height, block_ids.snow_layer);
         }
     }
 }
 
-fn top_solid_or_liquid_height(generator: &impl TerrainSource, buffer: &QuadChunkBuffer, block_ids: &BlockIds, wx: i32, wz: i32) -> Option<i32> {
+fn top_solid_or_liquid_height(generator: &impl TerrainSource, buffer: &QuadChunkBuffer, block_ids: &BlockIds, column: &ColumnCursor) -> Option<i32> {
     for wy in (0..CHUNK_HEIGHT as i32).rev() {
-        let id = read(generator, buffer, wx, wy, wz);
+        let id = column.read(generator, buffer, wy);
         if id != block_ids.air && !is_small_plant(block_ids, id) {
             return Some(wy + 1);
         }

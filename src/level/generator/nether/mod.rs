@@ -81,14 +81,6 @@ impl NetherGenerator {
             seed,
             block_ids: BlockIds::resolve(registry),
 
-            // Construction order matters (each draws from the same `rand`) - matches
-            // `ChunkProviderHell`'s own field order exactly. Two of its 7 noise fields
-            // (10 and 16 octaves, sampled last in its density builder) are omitted:
-            // their sampled values feed local variables that are computed and then
-            // never read anywhere before being overwritten - dead code in the
-            // reference itself. Skipping their *construction* too is safe only
-            // because they're last in the reference's own construction order, so
-            // nothing built afterward depends on the RNG state they'd have consumed.
             low_noise: OctaveNoise::new(&mut rand),
             high_noise: OctaveNoise::new(&mut rand),
             blend_noise: OctaveNoise::new(&mut rand),
@@ -124,13 +116,6 @@ impl NetherGenerator {
         self.low_noise.sample_3d(&mut density_low, world_offset_3d, DVec3::new(684.412, 2053.236, 684.412));
         self.high_noise.sample_3d(&mut density_high, world_offset_3d, DVec3::new(684.412, 2053.236, 684.412));
 
-        // Cosine-based ceiling/floor taper: pulls density down near the very top and
-        // bottom of the height range (with an extra cubic dip in the outer 4 cells),
-        // giving the nether its closed-cavern shape instead of overworld's single
-        // open surface. The reference computes this with real `Math.cos`, not the
-        // Notchian sin/cos lookup table used everywhere else in this generator.
-        // `y` also feeds the formula itself, not just `taper`'s indexing, so clippy's
-        // iterator rewrite doesn't apply here.
         let mut taper = [0.0f64; DENSITY_GRID_HEIGHT];
         for y in 0..DENSITY_GRID_HEIGHT {
             taper[y] = (y as f64 * std::f64::consts::PI * 6.0 / DENSITY_GRID_HEIGHT as f64).cos() * 2.0;
@@ -196,9 +181,6 @@ impl NetherGenerator {
     fn generate_surface(&self, x: i32, z: i32, column: &mut ChunkBuffer, rand: &mut JavaRand, block_ids: &BlockIds) {
         let (soul_sand_field, gravel_field, thickness_field) = self.sample_surface_fields(x, z);
 
-        // Iteration order (z outer, x inner) must match the reference generator
-        // exactly - confirmed against its own `var7 + var8 * 16` indexing, the same
-        // outer/inner correspondence the overworld generator's equivalent pass uses.
         for lz in 0..CHUNK_WIDTH {
             for lx in 0..CHUNK_WIDTH {
                 let has_soul_sand = soul_sand_field[lx][lz] + rand.random::<f64>() * 0.2 > 0.0;
@@ -211,8 +193,6 @@ impl NetherGenerator {
     }
 }
 
-// Decoration reads terrain through this - always a fresh, uncached computation, same as any
-// other out-of-quad read during population.
 impl TerrainSource for NetherGenerator {
     fn raw_terrain(&self, x: i32, z: i32) -> ChunkBuffer {
         self.build_terrain_column(x, z)
@@ -301,9 +281,6 @@ fn carve_column(column: &mut ChunkBuffer, lx: usize, lz: usize, has_soul_sand: b
     let mut remaining_thickness: i32 = -1;
 
     for y in (0..CHUNK_HEIGHT as i32).rev() {
-        // The reference draws a separate `nextInt(5)` for the ceiling and floor
-        // bedrock bands - same resulting body, but each must consume its own draw,
-        // so this can't be collapsed into one condition.
         #[allow(clippy::if_same_then_else)]
         if y >= CHUNK_HEIGHT as i32 - 1 - rand.random_with::<i32>(Bound::new(5)) {
             column.set(lx, y as usize, lz, block_ids.bedrock);

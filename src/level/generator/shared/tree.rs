@@ -1,7 +1,7 @@
 use glam::IVec3;
 
 use super::block_ids::BlockIds;
-use super::quad_chunk_buffer::{QuadChunkBuffer, read, write};
+use super::quad_chunk_buffer::{QuadChunkBuffer, column_at, read, write};
 use super::{CHUNK_HEIGHT, CHUNK_WIDTH, ClimateSource, TerrainSource};
 use crate::level::generator::math::MC_PI;
 use crate::level::generator::overworld::biome::Biome;
@@ -75,8 +75,9 @@ pub fn populate_from<G: TerrainSource + ClimateSource>(generator: &G, buffer: &m
 }
 
 fn surface_height(generator: &impl TerrainSource, buffer: &QuadChunkBuffer, block_ids: &BlockIds, wx: i32, wz: i32) -> i32 {
+    let column = column_at(wx, wz);
     for wy in (0..CHUNK_HEIGHT as i32).rev() {
-        if read(generator, buffer, wx, wy, wz) != block_ids.air {
+        if column.read(generator, buffer, wy) != block_ids.air {
             return wy + 1;
         }
     }

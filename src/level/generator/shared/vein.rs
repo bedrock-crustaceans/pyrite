@@ -1,7 +1,7 @@
 use glam::{DVec3, IVec3};
 
 use super::block_ids::BlockIds;
-use super::quad_chunk_buffer::{QuadChunkBuffer, read, write};
+use super::quad_chunk_buffer::{QuadChunkBuffer, column_at};
 use super::{CHUNK_HEIGHT, CHUNK_WIDTH, TerrainSource};
 use crate::level::generator::math::{MC_PI, mc_sin, mc_sin_cos};
 use crate::rand::java::JavaRand;
@@ -89,19 +89,31 @@ pub fn place_vein(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, 
         let stop = (center + half_size).floor().as_ivec3();
 
         for wx in start.x..=stop.x {
+            let dx = (wx as f64 + 0.5 - center.x) / half_size;
+            let dx_sq = dx * dx;
+
             for wz in start.z..=stop.z {
+                let dz = (wz as f64 + 0.5 - center.z) / half_size;
+                let dz_sq = dz * dz;
+
+                if dx_sq + dz_sq >= 1.0 {
+                    continue;
+                }
+
+                let column = column_at(wx, wz);
+
                 for wy in start.y..=stop.y {
                     if !(0..CHUNK_HEIGHT as i32).contains(&wy) {
                         continue;
                     }
 
-                    let delta = (DVec3::new(wx as f64, wy as f64, wz as f64) + 0.5 - center) / half_size;
-                    if delta.length_squared() >= 1.0 {
+                    let dy = (wy as f64 + 0.5 - center.y) / half_size;
+                    if (dx_sq + dy * dy) + dz_sq >= 1.0 {
                         continue;
                     }
 
-                    if read(generator, buffer, wx, wy, wz) == replace_id {
-                        write(buffer, wx, wy, wz, place_id);
+                    if column.read(generator, buffer, wy) == replace_id {
+                        column.write(buffer, wy, place_id);
                     }
                 }
             }

@@ -45,8 +45,6 @@ impl Population for NetherGenerator {
             place_glowstone_cluster(self, buffer, block_ids, pos, &mut rand);
         }
 
-        // `next_i32_bounded(1)` is always 0 - the reference's own check is a no-op that
-        // still consumes a draw, so every chunk gets exactly one attempt at each mushroom.
         if rand.random_with::<i32>(Bound::new(1)) == 0 {
             let pos = next_full_height_position(&mut rand, origin);
             place_mushroom(self, buffer, block_ids, block_ids.brown_mushroom, pos, &mut rand);
