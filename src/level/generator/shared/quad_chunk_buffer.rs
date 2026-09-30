@@ -35,13 +35,15 @@ pub struct QuadChunkBuffer {
     chunks: [[ChunkBuffer; 2]; 2],
     dirty: [[Vec<(u8, u8, u8)>; 2]; 2],
     outside: Cell<Option<OutsideQuad>>,
+    air: i32,
 }
 
 impl QuadChunkBuffer {
-    pub fn new(owner_x: i32, owner_z: i32, columns: [[ChunkBuffer; 2]; 2]) -> Self {
+    pub fn new(owner_x: i32, owner_z: i32, air: i32, columns: [[ChunkBuffer; 2]; 2]) -> Self {
         Self {
             x: owner_x,
             z: owner_z,
+            air,
             chunks: columns,
             dirty: Default::default(),
             outside: Cell::new(None),
@@ -122,7 +124,7 @@ pub fn column_at(wx: i32, wz: i32) -> ColumnCursor {
 impl ColumnCursor {
     pub fn read(&self, buffer: &QuadChunkBuffer, wy: i32) -> i32 {
         if !(0..CHUNK_HEIGHT as i32).contains(&wy) {
-            return -1;
+            return buffer.air;
         }
 
         match buffer.column(self.cx, self.cz) {

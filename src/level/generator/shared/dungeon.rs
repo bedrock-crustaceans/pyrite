@@ -1,6 +1,7 @@
 use glam::IVec3;
 
 use super::block_ids::BlockIds;
+use super::material::is_solid;
 use super::quad_chunk_buffer::{QuadChunkBuffer, read, write};
 use super::vein::next_offset;
 use super::{CHUNK_WIDTH, HORIZONTAL_FACES};
@@ -18,10 +19,6 @@ pub fn populate_from(buffer: &mut QuadChunkBuffer, owner_x: i32, owner_z: i32, b
 
 const CHEST_SLOT_COUNT: i32 = 27;
 
-fn is_solid(block_ids: &BlockIds, id: i32) -> bool {
-    id != block_ids.air && id != block_ids.water && id != block_ids.lava && id != block_ids.lava_still
-}
-
 fn roll_chest_stack(rand: &mut JavaRand) -> bool {
     match rand.random_with::<i32>(Bound::new(11)) {
         0 => true,
@@ -30,7 +27,10 @@ fn roll_chest_stack(rand: &mut JavaRand) -> bool {
             true
         }
         2 => true,
-        3 => true,
+        3 => {
+            rand.random_with::<i32>(Bound::new(4));
+            true
+        }
         4 => {
             rand.random_with::<i32>(Bound::new(4));
             true
@@ -68,8 +68,8 @@ fn place_dungeon(buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, pos: IVec3,
     let height = 3;
     let mut air_count = 0i32;
 
-    let start = pos - IVec3::new(x_radius + 1, 1, x_radius + 1);
-    let end = pos + IVec3::new(x_radius + 1, height + 1, x_radius + 1);
+    let start = pos - IVec3::new(x_radius + 1, 1, z_radius + 1);
+    let end = pos + IVec3::new(x_radius + 1, height + 1, z_radius + 1);
 
     for wx in start.x..=end.x {
         for wy in start.y..=end.y {
@@ -125,7 +125,7 @@ fn place_dungeon(buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, pos: IVec3,
             let bound1 = x_radius * 2 + 1;
             let chest_pos = pos + IVec3::new(rand.random_with::<i32>(Bound::new(bound1)) - x_radius, 0, rand.random_with::<i32>(Bound::new(bound)) - z_radius);
 
-            if read(buffer, pos.x, pos.y, pos.z) == block_ids.air {
+            if read(buffer, chest_pos.x, chest_pos.y, chest_pos.z) == block_ids.air {
                 let mut solid_count = 0;
                 for face in HORIZONTAL_FACES {
                     let neighbor = chest_pos + face;

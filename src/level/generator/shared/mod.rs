@@ -3,6 +3,7 @@ pub mod cave;
 pub mod chunk_buffer;
 pub mod dungeon;
 pub mod lake;
+pub mod material;
 pub mod plant;
 pub mod quad_chunk_buffer;
 pub mod snow;

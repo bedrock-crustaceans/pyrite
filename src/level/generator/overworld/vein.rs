@@ -1,7 +1,7 @@
 use glam::IVec3;
 
-use crate::level::generator::shared::quad_chunk_buffer::{QuadChunkBuffer, read};
-use crate::level::generator::shared::vein::{next_offset, place_vein, populate_ores};
+use crate::level::generator::shared::quad_chunk_buffer::QuadChunkBuffer;
+use crate::level::generator::shared::vein::{next_offset, place_clay, populate_ores};
 use crate::rand::java::JavaRand;
 
 use super::{CHUNK_WIDTH, OverworldGenerator};
@@ -12,9 +12,7 @@ pub fn populate_from(generator: &OverworldGenerator, buffer: &mut QuadChunkBuffe
 
     for _ in 0..10 {
         let pos = origin + next_offset(rand, 128, 0);
-        if read(buffer, pos.x, pos.y, pos.z) == block_ids.water {
-            place_vein(buffer, block_ids.sand, block_ids.clay, 32, pos, rand);
-        }
+        place_clay(buffer, block_ids, pos, rand);
     }
 
     populate_ores(buffer, owner_x, owner_z, block_ids, rand);

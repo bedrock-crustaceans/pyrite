@@ -180,8 +180,8 @@ impl SkyGenerator {
 
         self.blend_noise
             .sample_3d(&mut density_blend, world_offset_3d, DVec3::new(1368.824 / 80.0, 684.412 / 160.0, 1368.824 / 80.0));
-        self.low_noise.sample_3d(&mut density_low, world_offset_3d, DVec3::splat(1368.824));
-        self.high_noise.sample_3d(&mut density_high, world_offset_3d, DVec3::splat(1368.824));
+        self.low_noise.sample_3d(&mut density_low, world_offset_3d, DVec3::new(1368.824, 684.412, 1368.824));
+        self.high_noise.sample_3d(&mut density_high, world_offset_3d, DVec3::new(1368.824, 684.412, 1368.824));
 
         let mut density: DensityField = [[[0.0; DENSITY_GRID_SIZE]; DENSITY_GRID_HEIGHT]; DENSITY_GRID_SIZE];
 
@@ -301,7 +301,6 @@ fn carve_column(column: &mut ChunkBuffer, lx: usize, lz: usize, biome: Biome, su
         _ => (block_ids.grass, block_ids.dirt),
     };
 
-    #[allow(unused_assignments)]
     let mut top_id = biome_top_id;
     let mut filler_id = biome_filler_id;
     let mut remaining_thickness: i32 = -1;
@@ -316,9 +315,6 @@ fn carve_column(column: &mut ChunkBuffer, lx: usize, lz: usize, biome: Biome, su
                 if surface_thickness <= 0 {
                     top_id = block_ids.air;
                     filler_id = block_ids.stone;
-                } else {
-                    top_id = biome_top_id;
-                    filler_id = biome_filler_id;
                 }
 
                 remaining_thickness = surface_thickness;

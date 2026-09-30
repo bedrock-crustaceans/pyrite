@@ -1,10 +1,11 @@
 use glam::IVec3;
 
 use super::block_ids::BlockIds;
-use super::quad_chunk_buffer::{QuadChunkBuffer, column_at, read, write};
+use super::material::{height_value, is_opaque_cube};
+use super::quad_chunk_buffer::{QuadChunkBuffer, read, write};
 use super::{CHUNK_HEIGHT, CHUNK_WIDTH};
-use crate::level::generator::math::MC_PI;
 use crate::level::generator::overworld::biome::Biome;
+use crate::math::floor_double;
 use crate::rand::java::JavaRand;
 use crate::rand::primitives::Bound;
 
@@ -33,7 +34,7 @@ pub fn populate_from(buffer: &mut QuadChunkBuffer, owner_x: i32, owner_z: i32, b
         let tree_x = origin.x + rand.random_with::<i32>(Bound::new(bound)) + 8;
         let bound = CHUNK_WIDTH as i32;
         let tree_z = origin.z + rand.random_with::<i32>(Bound::new(bound)) + 8;
-        let tree_y = surface_height(buffer, block_ids, tree_x, tree_z);
+        let tree_y = height_value(buffer, block_ids, tree_x, tree_z);
         let pos = IVec3::new(tree_x, tree_y, tree_z);
 
         match biome {
@@ -69,16 +70,6 @@ pub fn populate_from(buffer: &mut QuadChunkBuffer, owner_x: i32, owner_z: i32, b
             }
         }
     }
-}
-
-fn surface_height(buffer: &QuadChunkBuffer, block_ids: &BlockIds, wx: i32, wz: i32) -> i32 {
-    let column = column_at(wx, wz);
-    for wy in (0..CHUNK_HEIGHT as i32).rev() {
-        if column.read(buffer, wy) != block_ids.air {
-            return wy + 1;
-        }
-    }
-    0
 }
 
 pub fn is_leaves(block_ids: &BlockIds, id: i32) -> bool {
@@ -140,11 +131,8 @@ fn place_simple_tree(buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, pos: IV
             for wz in pos.z - radius..=pos.z + radius {
                 let dx = (wx - pos.x).abs();
                 let dz = (wz - pos.z).abs();
-                if dx != radius || dz != radius || (rand.random_with::<i32>(Bound::new(2)) != 0 && dy != 0) {
-                    let id = read(buffer, wx, wy, wz);
-                    if id == block_ids.air || is_leaves(block_ids, id) {
-                        write(buffer, wx, wy, wz, leaves_id);
-                    }
+                if (dx != radius || dz != radius || (rand.random_with::<i32>(Bound::new(2)) != 0 && dy != 0)) && !is_opaque_cube(block_ids, read(buffer, wx, wy, wz)) {
+                    write(buffer, wx, wy, wz, leaves_id);
                 }
             }
         }
@@ -165,7 +153,7 @@ fn place_spruce1_tree(buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, pos: I
     let leaves_offset = height - rand.random_with::<i32>(Bound::new(2)) - 3;
     let leaves_height = height - leaves_offset;
     let bound = leaves_height + 1;
-    let max_radius = rand.random_with::<i32>(Bound::new(bound));
+    let max_radius = 1 + rand.random_with::<i32>(Bound::new(bound));
 
     let leaves_y = pos.y + leaves_offset;
     let check_radius = |y: i32| if y < leaves_y { 0 } else { max_radius };
@@ -177,16 +165,13 @@ fn place_spruce1_tree(buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, pos: I
     write(buffer, pos.x, pos.y - 1, pos.z, block_ids.dirt);
 
     let mut current_radius = 0;
-    for wy in leaves_y..=(pos.y + height) {
+    for wy in (leaves_y..=(pos.y + height)).rev() {
         for wx in pos.x - current_radius..=pos.x + current_radius {
             for wz in pos.z - current_radius..=pos.z + current_radius {
                 let dx = (wx - pos.x).abs();
                 let dz = (wz - pos.z).abs();
-                if dx != current_radius || dz != current_radius || current_radius <= 0 {
-                    let id = read(buffer, wx, wy, wz);
-                    if id == block_ids.air || is_leaves(block_ids, id) {
-                        write(buffer, wx, wy, wz, block_ids.spruce_leaves);
-                    }
+                if (dx != current_radius || dz != current_radius || current_radius <= 0) && !is_opaque_cube(block_ids, read(buffer, wx, wy, wz)) {
+                    write(buffer, wx, wy, wz, block_ids.spruce_leaves);
                 }
             }
         }
@@ -234,11 +219,8 @@ fn place_spruce2_tree(buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, pos: I
             for wz in pos.z - current_radius..=pos.z + current_radius {
                 let dx = (wx - pos.x).abs();
                 let dz = (wz - pos.z).abs();
-                if dx != current_radius || dz != current_radius || current_radius <= 0 {
-                    let id = read(buffer, wx, wy, wz);
-                    if id == block_ids.air || is_leaves(block_ids, id) {
-                        write(buffer, wx, wy, wz, block_ids.spruce_leaves);
-                    }
+                if (dx != current_radius || dz != current_radius || current_radius <= 0) && !is_opaque_cube(block_ids, read(buffer, wx, wy, wz)) {
+                    write(buffer, wx, wy, wz, block_ids.spruce_leaves);
                 }
             }
         }
@@ -271,11 +253,14 @@ struct BigTreeNode {
 
 fn place_big_tree(buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, pos: IVec3, rand: &mut JavaRand) -> bool {
     const HEIGHT_RANGE: i32 = 12;
-    const HEIGHT_ATTENUATION: f32 = 0.618;
-    const LEAF_DENSITY: f32 = 1.0;
+    const HEIGHT_ATTENUATION: f64 = 0.618;
+    const LEAF_DENSITY: f64 = 1.0;
     const BRANCH_DELTA_HEIGHT: i32 = 5;
-    const BRANCH_SCALE: f32 = 1.0;
-    const BRANCH_SLOPE: f32 = 0.381;
+    const BRANCH_SCALE: f64 = 1.0;
+    const BRANCH_SLOPE: f64 = 0.381;
+    //noinspection RsApproxConstant
+    #[allow(clippy::approx_constant)]
+    const BRANCH_ANGLE_PI: f64 = 3.14159;
 
     let mut rand = JavaRand::new(rand.random::<i64>());
     let mut height = rand.random_with::<i32>(Bound::new(HEIGHT_RANGE)) + 5;
@@ -285,19 +270,19 @@ fn place_big_tree(buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, pos: IVec3
         return false;
     }
 
-    if let Some(blocked_at) = check_big_tree_branch(buffer, block_ids, pos, pos + IVec3::new(0, height, 0)) {
-        if blocked_at.y - pos.y < 6 {
+    if let Some(clear_height) = check_big_tree_branch(buffer, block_ids, pos, pos + IVec3::new(0, height - 1, 0)) {
+        if clear_height < 6 {
             return false;
         }
-        height = blocked_at.y - pos.y;
+        height = clear_height;
     }
 
-    let mut height_attenuated = (height as f32 * HEIGHT_ATTENUATION) as i32;
+    let mut height_attenuated = (height as f64 * HEIGHT_ATTENUATION) as i32;
     if height_attenuated >= height {
         height_attenuated = height - 1;
     }
 
-    let nodes_per_height = ((1.382 + (LEAF_DENSITY * height as f32 / 13.0).powi(2)) as i32).max(1) as usize;
+    let nodes_per_height = ((1.382 + (LEAF_DENSITY * height as f64 / 13.0).powi(2)) as i32).max(1) as usize;
     let mut nodes: Vec<BigTreeNode> = Vec::with_capacity(nodes_per_height * height as usize);
 
     let mut leaf_offset = height - BRANCH_DELTA_HEIGHT;
@@ -314,16 +299,21 @@ fn place_big_tree(buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, pos: IVec3
         let size = calc_big_tree_layer_size(leaf_offset, height);
         if size >= 0.0 {
             for _ in 0..nodes_per_height {
-                let length = BRANCH_SCALE * size * (rand.random::<f32>() + 0.328);
-                let angle = rand.random::<f32>() * 2.0 * MC_PI;
+                let length = BRANCH_SCALE * size as f64 * (rand.random::<f32>() as f64 + 0.328);
+                let angle = rand.random::<f32>() as f64 * 2.0 * BRANCH_ANGLE_PI;
 
-                let leaf_x = (length * angle.sin() + pos.x as f32 + 0.5).floor() as i32;
-                let leaf_z = (length * angle.cos() + pos.z as f32 + 0.5).floor() as i32;
+                let leaf_x = floor_double(length * angle.sin() + pos.x as f64 + 0.5);
+                let leaf_z = floor_double(length * angle.cos() + pos.z as f64 + 0.5);
                 let leaf_pos = IVec3::new(leaf_x, leaf_y, leaf_z);
 
                 if check_big_tree_branch(buffer, block_ids, leaf_pos, leaf_pos + IVec3::new(0, BRANCH_DELTA_HEIGHT, 0)).is_none() {
-                    let horiz_dist = ((pos.x as f32 - leaf_x as f32).powi(2) + (pos.z as f32 - leaf_z as f32).powi(2)).sqrt();
-                    let leaf_start_y = ((leaf_y as f32 - horiz_dist * BRANCH_SLOPE) as i32).min(start_y);
+                    let horiz_dist = (((pos.x - leaf_x).abs() as f64).powi(2) + ((pos.z - leaf_z).abs() as f64).powi(2)).sqrt();
+                    let branch_drop = horiz_dist * BRANCH_SLOPE;
+                    let leaf_start_y = if leaf_y as f64 - branch_drop > start_y as f64 {
+                        start_y
+                    } else {
+                        (leaf_y as f64 - branch_drop) as i32
+                    };
                     let leaf_start_pos = IVec3::new(pos.x, leaf_start_y, pos.z);
 
                     if check_big_tree_branch(buffer, block_ids, leaf_start_pos, leaf_pos).is_none() {
@@ -343,9 +333,9 @@ fn place_big_tree(buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, pos: IVec3
 
     place_big_tree_branch(buffer, block_ids, pos, pos + IVec3::new(0, height_attenuated, 0));
 
-    let min_height = height as f32 * 0.2;
+    let min_height = height as f64 * 0.2;
     for node in &nodes {
-        if (node.start_y - pos.y) as f32 >= min_height {
+        if (node.start_y - pos.y) as f64 >= min_height {
             place_big_tree_branch(buffer, block_ids, IVec3::new(pos.x, node.start_y, pos.z), node.pos);
         }
     }
@@ -361,12 +351,12 @@ fn place_big_tree_leaf(buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, pos: 
 }
 
 fn place_big_tree_leaf_layer(buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, pos: IVec3, radius: f32) {
-    let block_radius = (radius + 0.618) as i32;
+    let block_radius = (radius as f64 + 0.618) as i32;
 
     for dx in -block_radius..=block_radius {
         for dz in -block_radius..=block_radius {
-            let dist = ((dx.abs() as f32 + 0.5).powi(2) + (dz.abs() as f32 + 0.5).powi(2)).sqrt();
-            if dist > radius {
+            let dist = ((dx.abs() as f64 + 0.5).powi(2) + (dz.abs() as f64 + 0.5).powi(2)).sqrt();
+            if dist > radius as f64 {
                 continue;
             }
 
@@ -380,16 +370,20 @@ fn place_big_tree_leaf_layer(buffer: &mut QuadChunkBuffer, block_ids: &BlockIds,
 }
 
 fn place_big_tree_branch(buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, from: IVec3, to: IVec3) {
-    for pos in BlockLineIter::new(from, to) {
+    let Some(line) = BlockLine::new(from, to) else { return };
+    for step in line.steps() {
+        let pos = line.at(step, 0.5);
         write(buffer, pos.x, pos.y, pos.z, block_ids.oak_log);
     }
 }
 
-fn check_big_tree_branch(buffer: &QuadChunkBuffer, block_ids: &BlockIds, from: IVec3, to: IVec3) -> Option<IVec3> {
-    for pos in BlockLineIter::new(from, to) {
+fn check_big_tree_branch(buffer: &QuadChunkBuffer, block_ids: &BlockIds, from: IVec3, to: IVec3) -> Option<i32> {
+    let line = BlockLine::new(from, to)?;
+    for step in line.steps() {
+        let pos = line.at(step, 0.0);
         let id = read(buffer, pos.x, pos.y, pos.z);
         if id != block_ids.air && !is_leaves(block_ids, id) {
-            return Some(pos);
+            return Some(step.abs());
         }
     }
     None
@@ -408,68 +402,63 @@ fn calc_big_tree_layer_size(leaf_offset: i32, height: i32) -> f32 {
     } else if b.abs() >= a {
         0.0
     } else {
-        (a.abs().powi(2) - b.abs().powi(2)).sqrt()
+        ((a.abs() as f64).powi(2) - (b.abs() as f64).powi(2)).sqrt() as f32
     }) * 0.5
 }
 
-#[derive(Default)]
-struct BlockLineIter {
+struct BlockLine {
     from: IVec3,
     major_axis: usize,
     second_axis: usize,
     third_axis: usize,
-    second_ratio: f32,
-    third_ratio: f32,
+    second_ratio: f64,
+    third_ratio: f64,
     major_inc: i32,
-    major_max: i32,
-    major: i32,
+    major_end: i32,
 }
 
-impl BlockLineIter {
-    fn new(from: IVec3, to: IVec3) -> Self {
+impl BlockLine {
+    fn new(from: IVec3, to: IVec3) -> Option<Self> {
         let delta = to - from;
-        if delta == IVec3::ZERO {
-            return Self::default();
+
+        let mut major_axis = 0;
+        for axis in 1..3 {
+            if delta[axis].abs() > delta[major_axis].abs() {
+                major_axis = axis;
+            }
         }
 
-        let major_axis = (0..3).map(|i: usize| (i, delta[i].abs())).max_by_key(|&(_, delta)| delta).unwrap().0;
+        let major_delta = delta[major_axis];
+        if major_delta == 0 {
+            return None;
+        }
+
         let second_axis = (major_axis + 1) % 3;
         let third_axis = (major_axis + 2) % 3;
-
-        let major_delta = delta[major_axis];
-        let second_ratio = delta[second_axis] as f32 / major_delta as f32;
-        let third_ratio = delta[third_axis] as f32 / major_delta as f32;
-
         let major_inc = major_delta.signum();
-        let major_max = major_delta + major_inc;
 
-        Self {
+        Some(Self {
             from,
             major_axis,
             second_axis,
             third_axis,
-            second_ratio,
-            third_ratio,
+            second_ratio: delta[second_axis] as f64 / major_delta as f64,
+            third_ratio: delta[third_axis] as f64 / major_delta as f64,
             major_inc,
-            major_max,
-            major: 0,
-        }
+            major_end: major_delta + major_inc,
+        })
     }
-}
 
-impl Iterator for BlockLineIter {
-    type Item = IVec3;
+    fn steps(&self) -> impl Iterator<Item = i32> + use<> {
+        let inc = self.major_inc;
+        (0..self.major_end.abs()).map(move |i| i * inc)
+    }
 
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.major == self.major_max {
-            return None;
-        }
-
+    fn at(&self, step: i32, rounding: f64) -> IVec3 {
         let mut pos = IVec3::ZERO;
-        pos[self.major_axis] = self.from[self.major_axis] + self.major;
-        pos[self.second_axis] = (self.from[self.second_axis] as f32 + self.major as f32 * self.second_ratio + 0.5).floor() as i32;
-        pos[self.third_axis] = (self.from[self.third_axis] as f32 + self.major as f32 * self.third_ratio + 0.5).floor() as i32;
-        self.major += self.major_inc;
-        Some(pos)
+        pos[self.major_axis] = self.from[self.major_axis] + step;
+        pos[self.second_axis] = floor_double(self.from[self.second_axis] as f64 + step as f64 * self.second_ratio + rounding);
+        pos[self.third_axis] = floor_double(self.from[self.third_axis] as f64 + step as f64 * self.third_ratio + rounding);
+        pos
     }
 }

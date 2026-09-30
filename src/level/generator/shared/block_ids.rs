@@ -1,4 +1,5 @@
 use chorus::block::block_id;
+use chorus::block::state::block_state::BlockState;
 use chorus::registry::block_registry::BlockRegistry;
 
 #[derive(Debug)]
@@ -41,7 +42,7 @@ pub struct BlockIds {
     pub red_mushroom: i32,
     pub brown_mushroom: i32,
     pub reeds: i32,
-    pub pumpkin: i32,
+    pub pumpkin_facings: [i32; 4],
     pub cactus: i32,
     pub snow_layer: i32,
 }
@@ -88,7 +89,11 @@ impl BlockIds {
             red_mushroom: id(block_id::RED_MUSHROOM),
             brown_mushroom: id(block_id::BROWN_MUSHROOM),
             reeds: id(block_id::REEDS),
-            pumpkin: id(block_id::CARVED_PUMPKIN),
+            pumpkin_facings: ["south", "west", "north", "east"].map(|facing| {
+                registry
+                    .get_block_id_with_states(block_id::CARVED_PUMPKIN, &[("minecraft:cardinal_direction", BlockState::Enum(facing.into()))])
+                    .unwrap_or(0)
+            }),
             cactus: id(block_id::CACTUS),
             snow_layer: id(block_id::SNOW_LAYER),
         }

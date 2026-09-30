@@ -100,7 +100,7 @@ fn place_lava_spring(buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, pos: IV
     }
 
     if netherrack_count == 4 && air_count == 1 {
-        write(buffer, pos.x, pos.y, pos.z, block_ids.lava);
+        write(buffer, pos.x, pos.y, pos.z, block_ids.lava_still);
     }
 }
 

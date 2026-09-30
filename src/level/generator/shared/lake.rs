@@ -4,6 +4,7 @@ use glam::{DVec3, IVec3};
 
 use super::CHUNK_WIDTH;
 use super::block_ids::BlockIds;
+use super::material::{has_sky_light, is_liquid, is_solid};
 use super::quad_chunk_buffer::{QuadChunkBuffer, column_at, read};
 use super::vein::next_offset;
 use crate::rand::java::JavaRand;
@@ -35,14 +36,6 @@ pub fn populate_from(buffer: &mut QuadChunkBuffer, owner_x: i32, owner_z: i32, b
             place_lake(buffer, block_ids, block_ids.lava_still, pos, rand);
         }
     }
-}
-
-fn is_solid(block_ids: &BlockIds, id: i32) -> bool {
-    id != block_ids.air && id != block_ids.water && id != block_ids.lava && id != block_ids.lava_still
-}
-
-fn is_fluid(block_ids: &BlockIds, id: i32) -> bool {
-    id == block_ids.water || id == block_ids.lava || id == block_ids.lava_still
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -90,7 +83,7 @@ fn place_lake(buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, fluid_id: i32,
             for dy in 0..8usize {
                 if is_edge(&fill, dx, dz, dy) {
                     let check_id = column.read(buffer, pos.y + dy as i32);
-                    if (dy >= 4 && is_fluid(block_ids, check_id)) || (dy < 4 && !is_solid(block_ids, check_id) && check_id != fluid_id) {
+                    if (dy >= 4 && is_liquid(block_ids, check_id)) || (dy < 4 && !is_solid(block_ids, check_id) && check_id != fluid_id) {
                         return false;
                     }
                 }
@@ -116,7 +109,7 @@ fn place_lake(buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, fluid_id: i32,
             for dy in 4..8usize {
                 if fill[dx][dz][dy] {
                     let below_y = pos.y + dy as i32 - 1;
-                    if column.read(buffer, below_y) == block_ids.dirt {
+                    if column.read(buffer, below_y) == block_ids.dirt && has_sky_light(buffer, block_ids, pos.x + dx as i32, below_y + 1, pos.z + dz as i32) {
                         column.write(buffer, below_y, block_ids.grass);
                     }
                 }

@@ -1,6 +1,6 @@
 use super::SkyGenerator;
 use crate::level::generator::overworld::biome::Biome;
-use crate::level::generator::shared::plant::{place_cactus, place_plants, place_pumpkin, place_sugar_canes};
+use crate::level::generator::shared::plant::{PlantRule, place_cactus, place_plants, place_pumpkin, place_sugar_canes};
 use crate::level::generator::shared::quad_chunk_buffer::QuadChunkBuffer;
 use crate::level::generator::shared::vein::next_offset;
 use crate::rand::java::JavaRand;
@@ -14,30 +14,22 @@ pub fn populate_from(generator: &SkyGenerator, buffer: &mut QuadChunkBuffer, own
 
     for _ in 0..2 {
         let pos = origin + next_offset(rand, 128, 8);
-        place_plants(buffer, pos, block_ids, block_ids.dandelion, 64, false, rand, |block_ids, below| {
-            below == block_ids.grass || below == block_ids.dirt
-        });
+        place_plants(buffer, pos, block_ids, block_ids.dandelion, 64, false, PlantRule::Flower, rand);
     }
 
     if rand.random_with::<i32>(Bound::new(2)) == 0 {
         let pos = origin + next_offset(rand, 128, 8);
-        place_plants(buffer, pos, block_ids, block_ids.poppy, 64, false, rand, |block_ids, below| {
-            below == block_ids.grass || below == block_ids.dirt
-        });
+        place_plants(buffer, pos, block_ids, block_ids.poppy, 64, false, PlantRule::Flower, rand);
     }
 
     if rand.random_with::<i32>(Bound::new(4)) == 0 {
         let pos = origin + next_offset(rand, 128, 8);
-        place_plants(buffer, pos, block_ids, block_ids.brown_mushroom, 64, false, rand, |block_ids, below| {
-            below != block_ids.air && below != block_ids.water
-        });
+        place_plants(buffer, pos, block_ids, block_ids.brown_mushroom, 64, false, PlantRule::Mushroom, rand);
     }
 
     if rand.random_with::<i32>(Bound::new(8)) == 0 {
         let pos = origin + next_offset(rand, 128, 8);
-        place_plants(buffer, pos, block_ids, block_ids.red_mushroom, 64, false, rand, |block_ids, below| {
-            below != block_ids.air && below != block_ids.water
-        });
+        place_plants(buffer, pos, block_ids, block_ids.red_mushroom, 64, false, PlantRule::Mushroom, rand);
     }
 
     for _ in 0..10 {

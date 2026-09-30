@@ -1,9 +1,10 @@
 use glam::{DVec3, IVec3};
 
 use super::block_ids::BlockIds;
-use super::quad_chunk_buffer::{QuadChunkBuffer, column_at};
+use super::material::is_water;
+use super::quad_chunk_buffer::{QuadChunkBuffer, column_at, read};
 use super::{CHUNK_HEIGHT, CHUNK_WIDTH};
-use crate::level::generator::math::{MC_PI, mc_sin, mc_sin_cos};
+use crate::math::{MC_PI, floor_double_vec, mc_sin, mc_sin_cos};
 use crate::rand::java::JavaRand;
 use crate::rand::primitives::Bound;
 
@@ -15,6 +16,12 @@ pub fn next_offset(rand: &mut JavaRand, max_y: i32, offset_xz: i32) -> IVec3 {
         rand.random_with::<i32>(Bound::new(max_y)),
         rand.random_with::<i32>(Bound::new(bound)) + offset_xz,
     )
+}
+
+pub fn place_clay(buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, pos: IVec3, rand: &mut JavaRand) {
+    if is_water(block_ids, read(buffer, pos.x, pos.y, pos.z)) {
+        place_vein(buffer, block_ids.sand, block_ids.clay, 32, pos, rand);
+    }
 }
 
 pub fn populate_ores(buffer: &mut QuadChunkBuffer, owner_x: i32, owner_z: i32, block_ids: &BlockIds, rand: &mut JavaRand) {
@@ -85,8 +92,8 @@ pub fn place_vein(buffer: &mut QuadChunkBuffer, replace_id: i32, place_id: i32, 
         let size = ((mc_sin(i as f32 * MC_PI / count as f32) + 1.0) as f64) * base_size + 1.0;
         let half_size = size / 2.0;
 
-        let start = (center - half_size).floor().as_ivec3();
-        let stop = (center + half_size).floor().as_ivec3();
+        let start = floor_double_vec(center - half_size);
+        let stop = floor_double_vec(center + half_size);
 
         for wx in start.x..=stop.x {
             let dx = (wx as f64 + 0.5 - center.x) / half_size;

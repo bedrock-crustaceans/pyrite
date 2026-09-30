@@ -3,7 +3,7 @@ use glam::{DVec3, IVec3};
 use super::block_ids::BlockIds;
 use super::chunk_buffer::ChunkBuffer;
 use super::{CHUNK_WIDTH, chunk_seed};
-use crate::level::generator::math::{MC_PI, mc_sin, mc_sin_cos};
+use crate::math::{MC_PI, floor_double_vec, mc_sin, mc_sin_cos};
 use crate::rand::java::JavaRand;
 use crate::rand::primitives::Bound;
 
@@ -184,8 +184,8 @@ impl CaveCarver {
 
             let size = DVec3::new(width, height, width);
 
-            let mut start = (pos - size).floor().as_ivec3();
-            let mut end = (pos + size).floor().as_ivec3();
+            let mut start = floor_double_vec(pos - size);
+            let mut end = floor_double_vec(pos + size);
 
             start -= IVec3::new(x * CHUNK_WIDTH as i32 + 1, 1, z * CHUNK_WIDTH as i32 + 1);
             end -= IVec3::new(x * CHUNK_WIDTH as i32 - 1, -1, z * CHUNK_WIDTH as i32 - 1);
@@ -199,7 +199,8 @@ impl CaveCarver {
                 for bz in start.z..end.z {
                     let mut by = end.y + 1;
                     while by >= start.y - 1 {
-                        if column.get(bx as usize, by as usize, bz as usize) == block_ids.water {
+                        let id = column.get(bx as usize, by as usize, bz as usize);
+                        if id == block_ids.water || id == block_ids.water_flowing {
                             continue 'main;
                         } else if by != start.y - 1 && bx != start.x && bx != end.x - 1 && bz != start.z && bz != end.z - 1 {
                             by = start.y;
@@ -226,7 +227,7 @@ impl CaveCarver {
                         let dy = (by as f64 + 0.5 - pos.y) / height;
 
                         // ...capped into a ball at top and bottom.
-                        if dy <= -0.7 || xz_dist_sq + dy.powi(2) >= 1.0 {
+                        if dy <= -0.7 || dx * dx + dy * dy + dz * dz >= 1.0 {
                             continue;
                         }
 

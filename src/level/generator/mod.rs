@@ -1,4 +1,3 @@
-pub mod math;
 pub mod nether;
 pub mod overworld;
 pub mod seed;

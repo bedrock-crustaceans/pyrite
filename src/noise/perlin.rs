@@ -1,6 +1,7 @@
 use glam::{DVec2, DVec3};
 use std::array;
 
+use crate::math::floor_double;
 use crate::rand::java::JavaRand;
 use crate::rand::primitives::Bound;
 
@@ -146,9 +147,9 @@ impl PerlinNoise {
 
                 let skew = (x + z) * SKEW;
                 let pos = x + skew;
-                let cell_x = pos.floor() as i32;
+                let cell_x = simplex_cell(pos);
                 let pos = z + skew;
-                let cell_z = pos.floor() as i32;
+                let cell_z = simplex_cell(pos);
 
                 let unskew = cell_x.wrapping_add(cell_z) as f64 * UNSKEW;
                 let delta_x = x - (cell_x as f64 - unskew);
@@ -232,15 +233,21 @@ fn gradient_flat(hash: u8, x: f64, z: f64) -> f64 {
 }
 
 #[inline(always)]
+fn simplex_cell(pos: f64) -> i32 {
+    let truncated = pos as i32;
+    if pos > 0.0 { truncated } else { truncated.wrapping_sub(1) }
+}
+
+#[inline(always)]
 fn axis_sample(pos: f64) -> (f64, f64, usize) {
-    let floor = pos.floor();
-    let frac = pos - floor;
+    let floor = floor_double(pos);
+    let frac = pos - floor as f64;
 
     let fade_inner = (frac * 6.0) - 15.0;
     let fade_mid = (frac * fade_inner) + 10.0;
     let fade = frac * frac * frac * fade_mid;
 
-    let index = (floor as i32 & 255) as usize;
+    let index = (floor & 255) as usize;
 
     (frac, fade, index)
 }

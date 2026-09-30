@@ -101,7 +101,7 @@ impl Phase<OverworldGenerator> for PopulationPhase {
         }
 
         let columns = [[home, (*caves(0, 1)?).clone()], [(*caves(1, 0)?).clone(), (*caves(1, 1)?).clone()]];
-        let mut quad = QuadChunkBuffer::new(cell.x, cell.z, columns);
+        let mut quad = QuadChunkBuffer::new(cell.x, cell.z, generator.block_ids.air, columns);
         generator.populate(cell.x, cell.z, &mut quad);
         quad.into_changes().map_err(PhaseError::custom)
     }

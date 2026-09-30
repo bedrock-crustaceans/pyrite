@@ -1,3 +1,4 @@
+use glam::{DVec3, IVec3};
 use std::sync::LazyLock;
 
 pub const MC_PI: f32 = std::f32::consts::PI;
@@ -19,4 +20,15 @@ pub fn mc_cos(x: f32) -> f32 {
 
 pub fn mc_sin_cos(x: f32) -> (f32, f32) {
     (mc_sin(x), mc_cos(x))
+}
+
+#[inline(always)]
+pub fn floor_double(value: f64) -> i32 {
+    let floor = value.floor();
+    if floor < i32::MIN as f64 { i32::MAX } else { floor as i32 }
+}
+
+#[inline(always)]
+pub fn floor_double_vec(value: DVec3) -> IVec3 {
+    IVec3::new(floor_double(value.x), floor_double(value.y), floor_double(value.z))
 }

@@ -1,6 +1,7 @@
 use glam::IVec3;
 
 use super::block_ids::BlockIds;
+use super::material::{is_liquid, is_solid};
 use super::quad_chunk_buffer::{ColumnCursor, QuadChunkBuffer, column_at};
 use super::{CHUNK_HEIGHT, CHUNK_WIDTH, SNOW_TEMPERATURE_REFERENCE_HEIGHT};
 
@@ -31,7 +32,7 @@ pub fn populate_from(buffer: &mut QuadChunkBuffer, owner_x: i32, owner_z: i32, b
             }
 
             let below = column.read(buffer, height - 1);
-            if !is_solid_ground(block_ids, below) {
+            if !is_solid(block_ids, below) || below == block_ids.ice {
                 continue;
             }
 
@@ -41,26 +42,11 @@ pub fn populate_from(buffer: &mut QuadChunkBuffer, owner_x: i32, owner_z: i32, b
 }
 
 fn top_solid_or_liquid_height(buffer: &QuadChunkBuffer, block_ids: &BlockIds, column: &ColumnCursor) -> Option<i32> {
-    for wy in (0..CHUNK_HEIGHT as i32).rev() {
+    for wy in (1..CHUNK_HEIGHT as i32).rev() {
         let id = column.read(buffer, wy);
-        if id != block_ids.air && !is_small_plant(block_ids, id) {
+        if is_solid(block_ids, id) || is_liquid(block_ids, id) {
             return Some(wy + 1);
         }
     }
     None
-}
-
-fn is_small_plant(block_ids: &BlockIds, id: i32) -> bool {
-    id == block_ids.dandelion
-        || id == block_ids.poppy
-        || id == block_ids.tall_grass
-        || id == block_ids.fern
-        || id == block_ids.deadbush
-        || id == block_ids.red_mushroom
-        || id == block_ids.brown_mushroom
-        || id == block_ids.reeds
-}
-
-fn is_solid_ground(block_ids: &BlockIds, id: i32) -> bool {
-    id != block_ids.air && id != block_ids.water && id != block_ids.water_flowing && id != block_ids.lava && id != block_ids.lava_still && id != block_ids.ice && !is_small_plant(block_ids, id)
 }

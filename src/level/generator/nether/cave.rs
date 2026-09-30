@@ -1,8 +1,8 @@
 use glam::{DVec3, IVec3};
 
 use super::{BlockIds, CHUNK_HEIGHT, CHUNK_WIDTH, chunk_seed};
-use crate::level::generator::math::{MC_PI, mc_sin, mc_sin_cos};
 use crate::level::generator::shared::chunk_buffer::ChunkBuffer;
+use crate::math::{MC_PI, floor_double_vec, mc_sin, mc_sin_cos};
 use crate::rand::java::JavaRand;
 use crate::rand::primitives::Bound;
 
@@ -174,8 +174,8 @@ impl CaveCarver {
 
             let size = DVec3::new(width, height, width);
 
-            let mut start = (pos - size).floor().as_ivec3();
-            let mut end = (pos + size).floor().as_ivec3();
+            let mut start = floor_double_vec(pos - size);
+            let mut end = floor_double_vec(pos + size);
 
             start -= IVec3::new(x * CHUNK_WIDTH as i32 + 1, 1, z * CHUNK_WIDTH as i32 + 1);
             end -= IVec3::new(x * CHUNK_WIDTH as i32 - 1, -1, z * CHUNK_WIDTH as i32 - 1);
@@ -212,7 +212,7 @@ impl CaveCarver {
                     for by in (start.y..end.y).rev() {
                         let dy = (by as f64 + 0.5 - pos.y) / height;
 
-                        if dy <= -0.7 || xz_dist_sq + dy.powi(2) >= 1.0 {
+                        if dy <= -0.7 || dx * dx + dy * dy + dz * dz >= 1.0 {
                             continue;
                         }
 

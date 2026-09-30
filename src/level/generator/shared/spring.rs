@@ -19,7 +19,7 @@ pub fn populate_from(buffer: &mut QuadChunkBuffer, owner_x: i32, owner_z: i32, b
                 },
                 rand.random_with::<i32>(Bound::new(CHUNK_WIDTH as i32)) + 8,
             );
-        place_spring(buffer, block_ids, block_ids.water_flowing, pos);
+        place_spring(buffer, block_ids, block_ids.water, pos);
     }
 
     for _ in 0..20 {
@@ -33,7 +33,7 @@ pub fn populate_from(buffer: &mut QuadChunkBuffer, owner_x: i32, owner_z: i32, b
                 },
                 rand.random_with::<i32>(Bound::new(CHUNK_WIDTH as i32)) + 8,
             );
-        place_spring(buffer, block_ids, block_ids.lava, pos);
+        place_spring(buffer, block_ids, block_ids.lava_still, pos);
     }
 }
 
