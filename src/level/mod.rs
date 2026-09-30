@@ -14,7 +14,8 @@ pub mod generator;
 pub fn insert_level(mut level: ResMut<Level>, registry: Res<BlockRegistry>) {
     // let seed_str = "2151901553968352745"; // title-screen seed
     // let seed_str = "3257840388504953787"; // pack.png seed
-    let seed_str = "Glacier"; // another og seed
+    // let seed_str = "Glacier";
+    let seed_str = "gargamel";
 
     let seed = parse_seed(seed_str);
 
