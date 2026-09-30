@@ -2,17 +2,14 @@ use glam::IVec3;
 
 use super::block_ids::BlockIds;
 use super::quad_chunk_buffer::{QuadChunkBuffer, column_at, read, write};
-use super::{CHUNK_HEIGHT, CHUNK_WIDTH, ClimateSource, TerrainSource};
+use super::{CHUNK_HEIGHT, CHUNK_WIDTH};
 use crate::level::generator::math::MC_PI;
 use crate::level::generator::overworld::biome::Biome;
 use crate::rand::java::JavaRand;
 use crate::rand::primitives::Bound;
 
-pub fn populate_from<G: TerrainSource + ClimateSource>(generator: &G, buffer: &mut QuadChunkBuffer, owner_x: i32, owner_z: i32, block_ids: &BlockIds, rand: &mut JavaRand) {
+pub fn populate_from(buffer: &mut QuadChunkBuffer, owner_x: i32, owner_z: i32, biome: Biome, feature_value: f64, block_ids: &BlockIds, rand: &mut JavaRand) {
     let origin = IVec3::new(owner_x * CHUNK_WIDTH as i32, 0, owner_z * CHUNK_WIDTH as i32);
-    let biome = generator.biome_at(origin.x + 16, origin.z + 16);
-
-    let feature_value = generator.feature_noise_at(origin.x as f64 * 0.5, origin.z as f64 * 0.5);
     let base_tree_count = ((feature_value / 8.0 + rand.random::<f64>() * 4.0 + 4.0) / 3.0) as i32;
 
     let mut tree_count = 0;
@@ -36,48 +33,48 @@ pub fn populate_from<G: TerrainSource + ClimateSource>(generator: &G, buffer: &m
         let tree_x = origin.x + rand.random_with::<i32>(Bound::new(bound)) + 8;
         let bound = CHUNK_WIDTH as i32;
         let tree_z = origin.z + rand.random_with::<i32>(Bound::new(bound)) + 8;
-        let tree_y = surface_height(generator, buffer, block_ids, tree_x, tree_z);
+        let tree_y = surface_height(buffer, block_ids, tree_x, tree_z);
         let pos = IVec3::new(tree_x, tree_y, tree_z);
 
         match biome {
             Biome::Taiga => {
                 if rand.random_with::<i32>(Bound::new(3)) == 0 {
-                    place_spruce1_tree(generator, buffer, block_ids, pos, rand);
+                    place_spruce1_tree(buffer, block_ids, pos, rand);
                 } else {
-                    place_spruce2_tree(generator, buffer, block_ids, pos, rand);
+                    place_spruce2_tree(buffer, block_ids, pos, rand);
                 }
             }
             Biome::Forest => {
                 if rand.random_with::<i32>(Bound::new(5)) == 0 {
-                    place_simple_tree(generator, buffer, block_ids, pos, 5, block_ids.birch_log, block_ids.birch_leaves, rand);
+                    place_simple_tree(buffer, block_ids, pos, 5, block_ids.birch_log, block_ids.birch_leaves, rand);
                 } else if rand.random_with::<i32>(Bound::new(3)) == 0 {
-                    place_big_tree(generator, buffer, block_ids, pos, rand);
+                    place_big_tree(buffer, block_ids, pos, rand);
                 } else {
-                    place_simple_tree(generator, buffer, block_ids, pos, 4, block_ids.oak_log, block_ids.oak_leaves, rand);
+                    place_simple_tree(buffer, block_ids, pos, 4, block_ids.oak_log, block_ids.oak_leaves, rand);
                 }
             }
             Biome::RainForest => {
                 if rand.random_with::<i32>(Bound::new(3)) == 0 {
-                    place_big_tree(generator, buffer, block_ids, pos, rand);
+                    place_big_tree(buffer, block_ids, pos, rand);
                 } else {
-                    place_simple_tree(generator, buffer, block_ids, pos, 4, block_ids.oak_log, block_ids.oak_leaves, rand);
+                    place_simple_tree(buffer, block_ids, pos, 4, block_ids.oak_log, block_ids.oak_leaves, rand);
                 }
             }
             _ => {
                 if rand.random_with::<i32>(Bound::new(10)) == 0 {
-                    place_big_tree(generator, buffer, block_ids, pos, rand);
+                    place_big_tree(buffer, block_ids, pos, rand);
                 } else {
-                    place_simple_tree(generator, buffer, block_ids, pos, 4, block_ids.oak_log, block_ids.oak_leaves, rand);
+                    place_simple_tree(buffer, block_ids, pos, 4, block_ids.oak_log, block_ids.oak_leaves, rand);
                 }
             }
         }
     }
 }
 
-fn surface_height(generator: &impl TerrainSource, buffer: &QuadChunkBuffer, block_ids: &BlockIds, wx: i32, wz: i32) -> i32 {
+fn surface_height(buffer: &QuadChunkBuffer, block_ids: &BlockIds, wx: i32, wz: i32) -> i32 {
     let column = column_at(wx, wz);
     for wy in (0..CHUNK_HEIGHT as i32).rev() {
-        if column.read(generator, buffer, wy) != block_ids.air {
+        if column.read(buffer, wy) != block_ids.air {
             return wy + 1;
         }
     }
@@ -88,13 +85,13 @@ pub fn is_leaves(block_ids: &BlockIds, id: i32) -> bool {
     id == block_ids.oak_leaves || id == block_ids.birch_leaves || id == block_ids.spruce_leaves
 }
 
-fn check_tree(generator: &impl TerrainSource, buffer: &QuadChunkBuffer, block_ids: &BlockIds, pos: IVec3, height: i32, check_radius: impl Fn(i32) -> i32) -> bool {
+fn check_tree(buffer: &QuadChunkBuffer, block_ids: &BlockIds, pos: IVec3, height: i32, check_radius: impl Fn(i32) -> i32) -> bool {
     let max_y = pos.y + height + 1;
     if pos.y < 1 || max_y >= CHUNK_HEIGHT as i32 {
         return false;
     }
 
-    let below = read(generator, buffer, pos.x, pos.y - 1, pos.z);
+    let below = read(buffer, pos.x, pos.y - 1, pos.z);
     if below != block_ids.grass && below != block_ids.dirt {
         return false;
     }
@@ -103,7 +100,7 @@ fn check_tree(generator: &impl TerrainSource, buffer: &QuadChunkBuffer, block_id
         let radius = check_radius(wy);
         for wx in pos.x - radius..=pos.x + radius {
             for wz in pos.z - radius..=pos.z + radius {
-                let id = read(generator, buffer, wx, wy, wz);
+                let id = read(buffer, wx, wy, wz);
                 if id == block_ids.air || is_leaves(block_ids, id) {
                     continue;
                 }
@@ -116,7 +113,7 @@ fn check_tree(generator: &impl TerrainSource, buffer: &QuadChunkBuffer, block_id
 }
 
 #[allow(clippy::too_many_arguments)]
-fn place_simple_tree(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, pos: IVec3, min_height: i32, log_id: i32, leaves_id: i32, rand: &mut JavaRand) -> bool {
+fn place_simple_tree(buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, pos: IVec3, min_height: i32, log_id: i32, leaves_id: i32, rand: &mut JavaRand) -> bool {
     let height = rand.random_with::<i32>(Bound::new(3)) + min_height;
 
     let check_radius = |y: i32| {
@@ -129,7 +126,7 @@ fn place_simple_tree(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffe
         }
     };
 
-    if !check_tree(generator, buffer, block_ids, pos, height, check_radius) {
+    if !check_tree(buffer, block_ids, pos, height, check_radius) {
         return false;
     }
 
@@ -144,7 +141,7 @@ fn place_simple_tree(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffe
                 let dx = (wx - pos.x).abs();
                 let dz = (wz - pos.z).abs();
                 if dx != radius || dz != radius || (rand.random_with::<i32>(Bound::new(2)) != 0 && dy != 0) {
-                    let id = read(generator, buffer, wx, wy, wz);
+                    let id = read(buffer, wx, wy, wz);
                     if id == block_ids.air || is_leaves(block_ids, id) {
                         write(buffer, wx, wy, wz, leaves_id);
                     }
@@ -154,7 +151,7 @@ fn place_simple_tree(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffe
     }
 
     for wy in pos.y..(pos.y + height) {
-        let id = read(generator, buffer, pos.x, wy, pos.z);
+        let id = read(buffer, pos.x, wy, pos.z);
         if id == block_ids.air || is_leaves(block_ids, id) {
             write(buffer, pos.x, wy, pos.z, log_id);
         }
@@ -163,7 +160,7 @@ fn place_simple_tree(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffe
     true
 }
 
-fn place_spruce1_tree(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, pos: IVec3, rand: &mut JavaRand) -> bool {
+fn place_spruce1_tree(buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, pos: IVec3, rand: &mut JavaRand) -> bool {
     let height = rand.random_with::<i32>(Bound::new(5)) + 7;
     let leaves_offset = height - rand.random_with::<i32>(Bound::new(2)) - 3;
     let leaves_height = height - leaves_offset;
@@ -173,7 +170,7 @@ fn place_spruce1_tree(generator: &impl TerrainSource, buffer: &mut QuadChunkBuff
     let leaves_y = pos.y + leaves_offset;
     let check_radius = |y: i32| if y < leaves_y { 0 } else { max_radius };
 
-    if !check_tree(generator, buffer, block_ids, pos, height, check_radius) {
+    if !check_tree(buffer, block_ids, pos, height, check_radius) {
         return false;
     }
 
@@ -186,7 +183,7 @@ fn place_spruce1_tree(generator: &impl TerrainSource, buffer: &mut QuadChunkBuff
                 let dx = (wx - pos.x).abs();
                 let dz = (wz - pos.z).abs();
                 if dx != current_radius || dz != current_radius || current_radius <= 0 {
-                    let id = read(generator, buffer, wx, wy, wz);
+                    let id = read(buffer, wx, wy, wz);
                     if id == block_ids.air || is_leaves(block_ids, id) {
                         write(buffer, wx, wy, wz, block_ids.spruce_leaves);
                     }
@@ -202,7 +199,7 @@ fn place_spruce1_tree(generator: &impl TerrainSource, buffer: &mut QuadChunkBuff
     }
 
     for wy in pos.y..(pos.y + height - 1) {
-        let id = read(generator, buffer, pos.x, wy, pos.z);
+        let id = read(buffer, pos.x, wy, pos.z);
         if id == block_ids.air || is_leaves(block_ids, id) {
             write(buffer, pos.x, wy, pos.z, block_ids.spruce_log);
         }
@@ -211,7 +208,7 @@ fn place_spruce1_tree(generator: &impl TerrainSource, buffer: &mut QuadChunkBuff
     true
 }
 
-fn place_spruce2_tree(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, pos: IVec3, rand: &mut JavaRand) -> bool {
+fn place_spruce2_tree(buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, pos: IVec3, rand: &mut JavaRand) -> bool {
     let height = rand.random_with::<i32>(Bound::new(4)) + 6;
     let leaves_offset = rand.random_with::<i32>(Bound::new(2)) + 1;
     let leaves_height = height - leaves_offset;
@@ -220,7 +217,7 @@ fn place_spruce2_tree(generator: &impl TerrainSource, buffer: &mut QuadChunkBuff
     let leaves_y = pos.y + leaves_offset;
     let check_radius = |y: i32| if y < leaves_y { 0 } else { max_radius };
 
-    if !check_tree(generator, buffer, block_ids, pos, height, check_radius) {
+    if !check_tree(buffer, block_ids, pos, height, check_radius) {
         return false;
     }
 
@@ -238,7 +235,7 @@ fn place_spruce2_tree(generator: &impl TerrainSource, buffer: &mut QuadChunkBuff
                 let dx = (wx - pos.x).abs();
                 let dz = (wz - pos.z).abs();
                 if dx != current_radius || dz != current_radius || current_radius <= 0 {
-                    let id = read(generator, buffer, wx, wy, wz);
+                    let id = read(buffer, wx, wy, wz);
                     if id == block_ids.air || is_leaves(block_ids, id) {
                         write(buffer, wx, wy, wz, block_ids.spruce_leaves);
                     }
@@ -257,7 +254,7 @@ fn place_spruce2_tree(generator: &impl TerrainSource, buffer: &mut QuadChunkBuff
 
     let log_offset = rand.random_with::<i32>(Bound::new(3));
     for wy in pos.y..(pos.y + height - log_offset) {
-        let id = read(generator, buffer, pos.x, wy, pos.z);
+        let id = read(buffer, pos.x, wy, pos.z);
         if id == block_ids.air || is_leaves(block_ids, id) {
             write(buffer, pos.x, wy, pos.z, block_ids.spruce_log);
         }
@@ -272,7 +269,7 @@ struct BigTreeNode {
     start_y: i32,
 }
 
-fn place_big_tree(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, pos: IVec3, rand: &mut JavaRand) -> bool {
+fn place_big_tree(buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, pos: IVec3, rand: &mut JavaRand) -> bool {
     const HEIGHT_RANGE: i32 = 12;
     const HEIGHT_ATTENUATION: f32 = 0.618;
     const LEAF_DENSITY: f32 = 1.0;
@@ -283,12 +280,12 @@ fn place_big_tree(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, 
     let mut rand = JavaRand::new(rand.random::<i64>());
     let mut height = rand.random_with::<i32>(Bound::new(HEIGHT_RANGE)) + 5;
 
-    let below = read(generator, buffer, pos.x, pos.y - 1, pos.z);
+    let below = read(buffer, pos.x, pos.y - 1, pos.z);
     if below != block_ids.grass && below != block_ids.dirt {
         return false;
     }
 
-    if let Some(blocked_at) = check_big_tree_branch(generator, buffer, block_ids, pos, pos + IVec3::new(0, height, 0)) {
+    if let Some(blocked_at) = check_big_tree_branch(buffer, block_ids, pos, pos + IVec3::new(0, height, 0)) {
         if blocked_at.y - pos.y < 6 {
             return false;
         }
@@ -324,12 +321,12 @@ fn place_big_tree(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, 
                 let leaf_z = (length * angle.cos() + pos.z as f32 + 0.5).floor() as i32;
                 let leaf_pos = IVec3::new(leaf_x, leaf_y, leaf_z);
 
-                if check_big_tree_branch(generator, buffer, block_ids, leaf_pos, leaf_pos + IVec3::new(0, BRANCH_DELTA_HEIGHT, 0)).is_none() {
+                if check_big_tree_branch(buffer, block_ids, leaf_pos, leaf_pos + IVec3::new(0, BRANCH_DELTA_HEIGHT, 0)).is_none() {
                     let horiz_dist = ((pos.x as f32 - leaf_x as f32).powi(2) + (pos.z as f32 - leaf_z as f32).powi(2)).sqrt();
                     let leaf_start_y = ((leaf_y as f32 - horiz_dist * BRANCH_SLOPE) as i32).min(start_y);
                     let leaf_start_pos = IVec3::new(pos.x, leaf_start_y, pos.z);
 
-                    if check_big_tree_branch(generator, buffer, block_ids, leaf_start_pos, leaf_pos).is_none() {
+                    if check_big_tree_branch(buffer, block_ids, leaf_start_pos, leaf_pos).is_none() {
                         nodes.push(BigTreeNode { pos: leaf_pos, start_y: leaf_start_y });
                     }
                 }
@@ -341,7 +338,7 @@ fn place_big_tree(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, 
     }
 
     for node in &nodes {
-        place_big_tree_leaf(generator, buffer, block_ids, node.pos, BRANCH_DELTA_HEIGHT);
+        place_big_tree_leaf(buffer, block_ids, node.pos, BRANCH_DELTA_HEIGHT);
     }
 
     place_big_tree_branch(buffer, block_ids, pos, pos + IVec3::new(0, height_attenuated, 0));
@@ -356,14 +353,14 @@ fn place_big_tree(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, 
     true
 }
 
-fn place_big_tree_leaf(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, pos: IVec3, branch_delta_height: i32) {
+fn place_big_tree_leaf(buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, pos: IVec3, branch_delta_height: i32) {
     for dy in 0..branch_delta_height {
         let radius = if dy != 0 && dy != branch_delta_height - 1 { 3.0 } else { 2.0 };
-        place_big_tree_leaf_layer(generator, buffer, block_ids, pos + IVec3::new(0, dy, 0), radius);
+        place_big_tree_leaf_layer(buffer, block_ids, pos + IVec3::new(0, dy, 0), radius);
     }
 }
 
-fn place_big_tree_leaf_layer(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, pos: IVec3, radius: f32) {
+fn place_big_tree_leaf_layer(buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, pos: IVec3, radius: f32) {
     let block_radius = (radius + 0.618) as i32;
 
     for dx in -block_radius..=block_radius {
@@ -374,7 +371,7 @@ fn place_big_tree_leaf_layer(generator: &impl TerrainSource, buffer: &mut QuadCh
             }
 
             let (wx, wz) = (pos.x + dx, pos.z + dz);
-            let id = read(generator, buffer, wx, pos.y, wz);
+            let id = read(buffer, wx, pos.y, wz);
             if id == block_ids.air || is_leaves(block_ids, id) {
                 write(buffer, wx, pos.y, wz, block_ids.oak_leaves);
             }
@@ -388,9 +385,9 @@ fn place_big_tree_branch(buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, fro
     }
 }
 
-fn check_big_tree_branch(generator: &impl TerrainSource, buffer: &QuadChunkBuffer, block_ids: &BlockIds, from: IVec3, to: IVec3) -> Option<IVec3> {
+fn check_big_tree_branch(buffer: &QuadChunkBuffer, block_ids: &BlockIds, from: IVec3, to: IVec3) -> Option<IVec3> {
     for pos in BlockLineIter::new(from, to) {
-        let id = read(generator, buffer, pos.x, pos.y, pos.z);
+        let id = read(buffer, pos.x, pos.y, pos.z);
         if id != block_ids.air && !is_leaves(block_ids, id) {
             return Some(pos);
         }

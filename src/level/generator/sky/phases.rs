@@ -1,62 +1,30 @@
-use std::sync::Arc;
-
+use chorus::error::phase::PhaseError;
+use chorus::level::biome::biome_id::BiomeID;
 use chorus::level::chunk::Chunk;
+use chorus::level::dimension_type::DimensionType;
 use chorus::level::generator::dimension::Generator;
-use chorus::level::generator::phase::{Phase, PhaseInputs, Requirement, requirement, same_cell, self_requirement};
+use chorus::level::generator::phase::{Phase, PhaseInputs, Requirement, SAME_CELL};
 use chorus::level::generator::pos::ChunkPos;
 
-use super::SkyGenerator;
-use crate::level::generator::shared::TerrainSource;
+use super::{BiomeGrid, SkyGenerator};
 use crate::level::generator::shared::chunk_buffer::ChunkBuffer;
-use crate::level::generator::shared::phases::{Population, assemble_chunk, backward_neighbors, forward_quad, owner_quad};
-use crate::level::generator::shared::population::{self, PopulationSource};
-use crate::level::generator::shared::quad_chunk_buffer::QuadChunkBuffer;
-use crate::phase_value_enum;
+use crate::level::generator::shared::quad_chunk_buffer::{QuadChanges, QuadChunkBuffer};
 
-struct SkyPhaseView<'a, 'b> {
-    generator: &'a SkyGenerator,
-    inputs: &'a PhaseInputs<'b, SkyGenerator>,
+const FORWARD_QUAD: &[(i32, i32)] = &[(0, 0), (1, 0), (0, 1), (1, 1)];
+const OWNER_QUAD: &[(i32, i32)] = &[(-1, -1), (-1, 0), (0, -1), (0, 0)];
+const BACKWARD_NEIGHBORS: &[(i32, i32)] = &[(-1, -1), (-1, 0), (0, -1)];
+
+impl Generator for SkyGenerator {
+    type Terminal = ChunkPhase;
 }
 
-impl TerrainSource for SkyPhaseView<'_, '_> {
-    fn raw_terrain(&self, x: i32, z: i32) -> ChunkBuffer {
-        self.generator.raw_terrain(x, z)
-    }
+pub struct BiomePhase;
 
-    fn carve_caves(&self, x: i32, z: i32, column: &mut ChunkBuffer) {
-        self.generator.carve_caves(x, z, column);
-    }
+impl Phase<SkyGenerator> for BiomePhase {
+    type Output = BiomeGrid;
 
-    fn terrain_and_caves(&self, x: i32, z: i32) -> Arc<ChunkBuffer> {
-        self.inputs
-            .try_get::<CavesPhase>(ChunkPos::new(x, z))
-            .unwrap_or_else(|| panic!("terrain_and_caves({x}, {z}) missed the CavesPhase dependency cache"))
-    }
-
-    fn min_sub_chunk_y(&self) -> i8 {
-        self.generator.min_sub_chunk_y()
-    }
-
-    fn dimension_sub_chunk_count(&self) -> usize {
-        self.generator.dimension_sub_chunk_count()
-    }
-
-    fn air_id(&self) -> i32 {
-        self.generator.air_id()
-    }
-
-    fn biome(&self) -> i32 {
-        self.generator.biome()
-    }
-}
-
-impl PopulationSource for SkyPhaseView<'_, '_> {
-    fn owner_population(&self, owner_x: i32, owner_z: i32) -> Option<Arc<QuadChunkBuffer>> {
-        self.inputs.try_get::<PopulationPhase>(ChunkPos::new(owner_x, owner_z))
-    }
-
-    fn run_population(&self, owner_x: i32, owner_z: i32, buffer: &mut QuadChunkBuffer) {
-        self.generator.run_population_raw(owner_x, owner_z, buffer);
+    fn run(generator: &SkyGenerator, cell: ChunkPos, _inputs: &mut PhaseInputs<SkyGenerator>) -> Result<BiomeGrid, PhaseError> {
+        Ok(generator.biomes(cell.x, cell.z))
     }
 }
 
@@ -65,8 +33,25 @@ pub struct TerrainPhase;
 impl Phase<SkyGenerator> for TerrainPhase {
     type Output = ChunkBuffer;
 
-    fn run(generator: &SkyGenerator, cell: ChunkPos, _inputs: &PhaseInputs<SkyGenerator>) -> Self::Output {
-        generator.raw_terrain(cell.x, cell.z)
+    fn run(generator: &SkyGenerator, cell: ChunkPos, _inputs: &mut PhaseInputs<SkyGenerator>) -> Result<ChunkBuffer, PhaseError> {
+        Ok(generator.terrain(cell.x, cell.z))
+    }
+}
+
+pub struct SurfacePhase;
+
+impl Phase<SkyGenerator> for SurfacePhase {
+    type Output = ChunkBuffer;
+
+    fn requires() -> Vec<Requirement<SkyGenerator>> {
+        vec![TerrainPhase::at(SAME_CELL), BiomePhase::at(SAME_CELL)]
+    }
+
+    fn run(generator: &SkyGenerator, cell: ChunkPos, inputs: &mut PhaseInputs<SkyGenerator>) -> Result<ChunkBuffer, PhaseError> {
+        let mut column = inputs.take::<TerrainPhase>(cell)?;
+        let biomes = inputs.get::<BiomePhase>(cell)?;
+        generator.surface(cell.x, cell.z, &mut column, &biomes);
+        Ok(column)
     }
 }
 
@@ -75,32 +60,45 @@ pub struct CavesPhase;
 impl Phase<SkyGenerator> for CavesPhase {
     type Output = ChunkBuffer;
 
+    const RETAIN: usize = 1024;
+
     fn requires() -> Vec<Requirement<SkyGenerator>> {
-        vec![requirement::<SkyGenerator, TerrainPhase>(same_cell)]
+        vec![SurfacePhase::at(SAME_CELL)]
     }
 
-    fn run(generator: &SkyGenerator, cell: ChunkPos, inputs: &PhaseInputs<SkyGenerator>) -> Self::Output {
-        let mut column = (*inputs.get::<TerrainPhase>(cell)).clone();
+    fn run(generator: &SkyGenerator, cell: ChunkPos, inputs: &mut PhaseInputs<SkyGenerator>) -> Result<ChunkBuffer, PhaseError> {
+        let mut column = inputs.take::<SurfacePhase>(cell)?;
         generator.carve_caves(cell.x, cell.z, &mut column);
-        column
+        Ok(column)
     }
 }
 
 pub struct PopulationPhase;
 
 impl Phase<SkyGenerator> for PopulationPhase {
-    type Output = QuadChunkBuffer;
+    type Output = QuadChanges;
+
+    const RETAIN: usize = 1024;
 
     fn requires() -> Vec<Requirement<SkyGenerator>> {
-        vec![
-            requirement::<SkyGenerator, CavesPhase>(forward_quad),
-            self_requirement::<SkyGenerator, PopulationPhase>(backward_neighbors, 1),
-        ]
+        vec![CavesPhase::at(FORWARD_QUAD), PopulationPhase::at(BACKWARD_NEIGHBORS).max_hops(1)]
     }
 
-    fn run(generator: &SkyGenerator, cell: ChunkPos, inputs: &PhaseInputs<SkyGenerator>) -> Self::Output {
-        let view = SkyPhaseView { generator, inputs };
-        population::populate_owner(&view, cell.x, cell.z)
+    fn run(generator: &SkyGenerator, cell: ChunkPos, inputs: &mut PhaseInputs<SkyGenerator>) -> Result<QuadChanges, PhaseError> {
+        let caves = |dx: i32, dz: i32| inputs.get::<CavesPhase>(ChunkPos::new(cell.x + dx, cell.z + dz));
+
+        let baseline = caves(0, 0)?;
+        let mut home = (*baseline).clone();
+        for &(dx, dz) in BACKWARD_NEIGHBORS {
+            if let Some(neighbor) = inputs.try_get::<PopulationPhase>(ChunkPos::new(cell.x + dx, cell.z + dz)) {
+                neighbor.overlay_onto(cell.x, cell.z, &baseline, &mut home);
+            }
+        }
+
+        let columns = [[home, (*caves(0, 1)?).clone()], [(*caves(1, 0)?).clone(), (*caves(1, 1)?).clone()]];
+        let mut quad = QuadChunkBuffer::new(cell.x, cell.z, columns);
+        generator.populate(cell.x, cell.z, &mut quad);
+        quad.into_changes().map_err(PhaseError::custom)
     }
 }
 
@@ -110,14 +108,17 @@ impl Phase<SkyGenerator> for ColumnPhase {
     type Output = ChunkBuffer;
 
     fn requires() -> Vec<Requirement<SkyGenerator>> {
-        vec![requirement::<SkyGenerator, CavesPhase>(same_cell), requirement::<SkyGenerator, PopulationPhase>(owner_quad)]
+        vec![CavesPhase::at(SAME_CELL), PopulationPhase::at(OWNER_QUAD)]
     }
 
-    fn run(generator: &SkyGenerator, cell: ChunkPos, inputs: &PhaseInputs<SkyGenerator>) -> Self::Output {
-        let view = SkyPhaseView { generator, inputs };
-        let mut column = (*inputs.get::<CavesPhase>(cell)).clone();
-        population::populate(&view, cell.x, cell.z, &mut column);
-        column
+    fn run(_generator: &SkyGenerator, cell: ChunkPos, inputs: &mut PhaseInputs<SkyGenerator>) -> Result<ChunkBuffer, PhaseError> {
+        let baseline = inputs.get::<CavesPhase>(cell)?;
+        let mut column = (*baseline).clone();
+        for &(dx, dz) in OWNER_QUAD {
+            let owner = inputs.get::<PopulationPhase>(ChunkPos::new(cell.x + dx, cell.z + dz))?;
+            owner.overlay_onto(cell.x, cell.z, &baseline, &mut column);
+        }
+        Ok(column)
     }
 }
 
@@ -127,26 +128,10 @@ impl Phase<SkyGenerator> for ChunkPhase {
     type Output = Chunk;
 
     fn requires() -> Vec<Requirement<SkyGenerator>> {
-        vec![requirement::<SkyGenerator, ColumnPhase>(same_cell)]
+        vec![ColumnPhase::at(SAME_CELL)]
     }
 
-    fn run(generator: &SkyGenerator, cell: ChunkPos, inputs: &PhaseInputs<SkyGenerator>) -> Self::Output {
-        let column = inputs.get::<ColumnPhase>(cell).as_ref().clone();
-        assemble_chunk(generator, cell, column)
+    fn run(generator: &SkyGenerator, cell: ChunkPos, inputs: &mut PhaseInputs<SkyGenerator>) -> Result<Chunk, PhaseError> {
+        Ok(inputs.take::<ColumnPhase>(cell)?.into_chunk(cell, DimensionType::Overworld, generator.block_ids.air, BiomeID::PLAINS))
     }
-}
-
-phase_value_enum! {
-    pub enum SkyPhaseValue for SkyGenerator {
-        Terrain(TerrainPhase) => ChunkBuffer,
-        Caves(CavesPhase) => ChunkBuffer,
-        Population(PopulationPhase) => QuadChunkBuffer,
-        Column(ColumnPhase) => ChunkBuffer,
-        Chunk(ChunkPhase) => Chunk,
-    }
-}
-
-impl Generator for SkyGenerator {
-    type Terminal = ChunkPhase;
-    type Value = SkyPhaseValue;
 }

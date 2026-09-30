@@ -3,16 +3,16 @@ use glam::IVec3;
 use super::block_ids::BlockIds;
 use super::quad_chunk_buffer::{QuadChunkBuffer, read, write};
 use super::vein::next_offset;
-use super::{CHUNK_WIDTH, HORIZONTAL_FACES, TerrainSource};
+use super::{CHUNK_WIDTH, HORIZONTAL_FACES};
 use crate::rand::java::JavaRand;
 use crate::rand::primitives::Bound;
 
-pub fn populate_from(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, owner_x: i32, owner_z: i32, block_ids: &BlockIds, rand: &mut JavaRand) {
+pub fn populate_from(buffer: &mut QuadChunkBuffer, owner_x: i32, owner_z: i32, block_ids: &BlockIds, rand: &mut JavaRand) {
     let origin = IVec3::new(owner_x * CHUNK_WIDTH as i32, 0, owner_z * CHUNK_WIDTH as i32);
 
     for _ in 0..8 {
         let pos = origin + next_offset(rand, 128, 8);
-        place_dungeon(generator, buffer, block_ids, pos, rand);
+        place_dungeon(buffer, block_ids, pos, rand);
     }
 }
 
@@ -62,7 +62,7 @@ fn roll_chest_stack(rand: &mut JavaRand) -> bool {
     }
 }
 
-fn place_dungeon(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, pos: IVec3, rand: &mut JavaRand) -> bool {
+fn place_dungeon(buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, pos: IVec3, rand: &mut JavaRand) -> bool {
     let x_radius = rand.random_with::<i32>(Bound::new(2)) + 2;
     let z_radius = rand.random_with::<i32>(Bound::new(2)) + 2;
     let height = 3;
@@ -74,13 +74,13 @@ fn place_dungeon(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, b
     for wx in start.x..=end.x {
         for wy in start.y..=end.y {
             for wz in start.z..=end.z {
-                let id = read(generator, buffer, wx, wy, wz);
+                let id = read(buffer, wx, wy, wz);
                 let solid = is_solid(block_ids, id);
 
                 if (wy == start.y || wy == end.y) && !solid {
                     return false;
                 } else if wy == pos.y && (wx == start.x || wx == end.x || wz == start.z || wz == end.z) {
-                    let above_id = read(generator, buffer, wx, wy + 1, wz);
+                    let above_id = read(buffer, wx, wy + 1, wz);
                     if id == block_ids.air && above_id == block_ids.air {
                         air_count += 1;
                     }
@@ -100,11 +100,11 @@ fn place_dungeon(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, b
                 if wx != start.x && wy != start.y && wz != start.z && wx != end.x && wz != end.z {
                     write(buffer, wx, wy, wz, block_ids.air);
                 } else {
-                    let below_id = read(generator, buffer, wx, wy - 1, wz);
+                    let below_id = read(buffer, wx, wy - 1, wz);
                     if wy >= 0 && !is_solid(block_ids, below_id) {
                         write(buffer, wx, wy, wz, block_ids.air);
                     } else {
-                        let here_id = read(generator, buffer, wx, wy, wz);
+                        let here_id = read(buffer, wx, wy, wz);
                         if is_solid(block_ids, here_id) {
                             if wy == start.y && rand.random_with::<i32>(Bound::new(4)) != 0 {
                                 write(buffer, wx, wy, wz, block_ids.mossy_cobblestone);
@@ -125,11 +125,11 @@ fn place_dungeon(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, b
             let bound1 = x_radius * 2 + 1;
             let chest_pos = pos + IVec3::new(rand.random_with::<i32>(Bound::new(bound1)) - x_radius, 0, rand.random_with::<i32>(Bound::new(bound)) - z_radius);
 
-            if read(generator, buffer, pos.x, pos.y, pos.z) == block_ids.air {
+            if read(buffer, pos.x, pos.y, pos.z) == block_ids.air {
                 let mut solid_count = 0;
                 for face in HORIZONTAL_FACES {
                     let neighbor = chest_pos + face;
-                    if is_solid(block_ids, read(generator, buffer, neighbor.x, neighbor.y, neighbor.z)) {
+                    if is_solid(block_ids, read(buffer, neighbor.x, neighbor.y, neighbor.z)) {
                         solid_count += 1;
                         if solid_count > 1 {
                             continue 'chest_try;

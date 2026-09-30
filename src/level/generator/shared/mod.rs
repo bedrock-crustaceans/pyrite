@@ -3,23 +3,16 @@ pub mod cave;
 pub mod chunk_buffer;
 pub mod dungeon;
 pub mod lake;
-pub mod phase_value;
-pub mod phases;
 pub mod plant;
-pub mod population;
 pub mod quad_chunk_buffer;
 pub mod snow;
 pub mod spring;
 pub mod tree;
 pub mod vein;
 
-use std::sync::Arc;
-
 use glam::IVec3;
 
-use crate::level::generator::overworld::biome::Biome;
 use crate::rand::java::JavaRand;
-use chunk_buffer::ChunkBuffer;
 
 pub const HORIZONTAL_FACES: [IVec3; 4] = [IVec3::new(0, 0, -1), IVec3::new(0, 0, 1), IVec3::new(-1, 0, 0), IVec3::new(1, 0, 0)];
 
@@ -29,31 +22,6 @@ pub const SUB_CHUNK_SIZE: usize = 16;
 pub const SUB_CHUNK_COUNT: usize = CHUNK_HEIGHT / SUB_CHUNK_SIZE;
 pub const CAVE_RADIUS: i32 = 8;
 pub const SNOW_TEMPERATURE_REFERENCE_HEIGHT: i32 = 64;
-
-pub trait TerrainSource {
-    fn raw_terrain(&self, x: i32, z: i32) -> ChunkBuffer;
-    fn carve_caves(&self, x: i32, z: i32, column: &mut ChunkBuffer);
-
-    fn terrain_and_caves(&self, x: i32, z: i32) -> Arc<ChunkBuffer> {
-        let mut column = self.raw_terrain(x, z);
-        self.carve_caves(x, z, &mut column);
-        Arc::new(column)
-    }
-
-    fn min_sub_chunk_y(&self) -> i8;
-    fn dimension_sub_chunk_count(&self) -> usize;
-    fn air_id(&self) -> i32;
-    fn biome(&self) -> i32;
-}
-
-pub trait ClimateSource {
-    fn climate_at(&self, x: i32, z: i32) -> (f64, f64, Biome);
-    fn feature_noise_at(&self, x: f64, z: f64) -> f64;
-
-    fn biome_at(&self, x: i32, z: i32) -> Biome {
-        self.climate_at(x, z).2
-    }
-}
 
 pub fn chunk_seed(world_seed: i64, x: i32, z: i32) -> i64 {
     let mut rand = JavaRand::new(world_seed);

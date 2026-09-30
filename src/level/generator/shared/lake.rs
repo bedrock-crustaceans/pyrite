@@ -2,19 +2,19 @@
 
 use glam::{DVec3, IVec3};
 
+use super::CHUNK_WIDTH;
 use super::block_ids::BlockIds;
 use super::quad_chunk_buffer::{QuadChunkBuffer, column_at, read};
 use super::vein::next_offset;
-use super::{CHUNK_WIDTH, TerrainSource};
 use crate::rand::java::JavaRand;
 use crate::rand::primitives::Bound;
 
-pub fn populate_from(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, owner_x: i32, owner_z: i32, block_ids: &BlockIds, rand: &mut JavaRand) {
+pub fn populate_from(buffer: &mut QuadChunkBuffer, owner_x: i32, owner_z: i32, block_ids: &BlockIds, rand: &mut JavaRand) {
     let origin = IVec3::new(owner_x * CHUNK_WIDTH as i32, 0, owner_z * CHUNK_WIDTH as i32);
 
     if rand.random_with::<i32>(Bound::new(4)) == 0 {
         let pos = origin + next_offset(rand, 128, 8);
-        place_lake(generator, buffer, block_ids, block_ids.water, pos, rand);
+        place_lake(buffer, block_ids, block_ids.water, pos, rand);
     }
 
     if rand.random_with::<i32>(Bound::new(8)) == 0 {
@@ -32,7 +32,7 @@ pub fn populate_from(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffe
             );
 
         if pos.y < 64 || rand.random_with::<i32>(Bound::new(10)) == 0 {
-            place_lake(generator, buffer, block_ids, block_ids.lava_still, pos, rand);
+            place_lake(buffer, block_ids, block_ids.lava_still, pos, rand);
         }
     }
 }
@@ -46,10 +46,10 @@ fn is_fluid(block_ids: &BlockIds, id: i32) -> bool {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn place_lake(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, fluid_id: i32, mut pos: IVec3, rand: &mut JavaRand) -> bool {
+fn place_lake(buffer: &mut QuadChunkBuffer, block_ids: &BlockIds, fluid_id: i32, mut pos: IVec3, rand: &mut JavaRand) -> bool {
     pos -= IVec3::new(8, 0, 8);
 
-    while pos.y > 0 && read(generator, buffer, pos.x, pos.y, pos.z) == block_ids.air {
+    while pos.y > 0 && read(buffer, pos.x, pos.y, pos.z) == block_ids.air {
         pos.y -= 1;
     }
     pos.y -= 4;
@@ -89,7 +89,7 @@ fn place_lake(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, bloc
             let column = column_at(pos.x + dx as i32, pos.z + dz as i32);
             for dy in 0..8usize {
                 if is_edge(&fill, dx, dz, dy) {
-                    let check_id = column.read(generator, buffer, pos.y + dy as i32);
+                    let check_id = column.read(buffer, pos.y + dy as i32);
                     if (dy >= 4 && is_fluid(block_ids, check_id)) || (dy < 4 && !is_solid(block_ids, check_id) && check_id != fluid_id) {
                         return false;
                     }
@@ -116,7 +116,7 @@ fn place_lake(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, bloc
             for dy in 4..8usize {
                 if fill[dx][dz][dy] {
                     let below_y = pos.y + dy as i32 - 1;
-                    if column.read(generator, buffer, below_y) == block_ids.dirt {
+                    if column.read(buffer, below_y) == block_ids.dirt {
                         column.write(buffer, below_y, block_ids.grass);
                     }
                 }
@@ -130,7 +130,7 @@ fn place_lake(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, bloc
                 let column = column_at(pos.x + dx as i32, pos.z + dz as i32);
                 for dy in 0..8usize {
                     if is_edge(&fill, dx, dz, dy) && (dy < 4 || rand.random_with::<i32>(Bound::new(2)) != 0) {
-                        let id = column.read(generator, buffer, pos.y + dy as i32);
+                        let id = column.read(buffer, pos.y + dy as i32);
                         if is_solid(block_ids, id) {
                             column.write(buffer, pos.y + dy as i32, block_ids.stone);
                         }

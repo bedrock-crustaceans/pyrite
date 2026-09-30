@@ -7,7 +7,7 @@ use chorus::registry::block_registry::BlockRegistry;
 use glam::{DVec2, DVec3};
 
 use crate::level::generator::shared::chunk_buffer::ChunkBuffer;
-use crate::level::generator::shared::{CAVE_RADIUS, CHUNK_HEIGHT, CHUNK_WIDTH, TerrainSource, chunk_seed};
+use crate::level::generator::shared::{CAVE_RADIUS, CHUNK_HEIGHT, CHUNK_WIDTH, chunk_seed};
 use crate::noise::octave::OctaveNoise;
 use crate::rand::java::JavaRand;
 
@@ -89,17 +89,30 @@ impl NetherGenerator {
         }
     }
 
-    fn build_terrain_column(&self, x: i32, z: i32) -> ChunkBuffer {
-        let block_ids = &self.block_ids;
-        let mut column = ChunkBuffer::new(block_ids.air);
-
+    fn terrain(&self, x: i32, z: i32) -> ChunkBuffer {
+        let mut column = ChunkBuffer::new(self.block_ids.air);
         let density = self.build_density_field(x, z);
-        place_terrain(&mut column, &density, block_ids);
-
-        let mut rand = JavaRand::new(i64::wrapping_add((x as i64).wrapping_mul(341873128712), (z as i64).wrapping_mul(132897987541)));
-        self.generate_surface(x, z, &mut column, &mut rand, block_ids);
-
+        place_terrain(&mut column, &density, &self.block_ids);
         column
+    }
+
+    fn surface(&self, x: i32, z: i32, column: &mut ChunkBuffer) {
+        let (soul_sand_field, gravel_field, thickness_field) = self.sample_surface_fields(x, z);
+        let mut rand = JavaRand::new(i64::wrapping_add((x as i64).wrapping_mul(341873128712), (z as i64).wrapping_mul(132897987541)));
+
+        for lz in 0..CHUNK_WIDTH {
+            for lx in 0..CHUNK_WIDTH {
+                let has_soul_sand = soul_sand_field[lx][lz] + rand.random::<f64>() * 0.2 > 0.0;
+                let has_gravel = gravel_field[lx][lz] + rand.random::<f64>() * 0.2 > 0.0;
+                let surface_thickness = (thickness_field[lx][lz] / 3.0 + 3.0 + rand.random::<f64>() * 0.25) as i32;
+
+                carve_column(column, lx, lz, has_soul_sand, has_gravel, surface_thickness, &mut rand, &self.block_ids);
+            }
+        }
+    }
+
+    fn carve_caves(&self, x: i32, z: i32, column: &mut ChunkBuffer) {
+        CaveCarver::new(CAVE_RADIUS).carve(self.seed, x, z, column, &self.block_ids);
     }
 
     #[allow(clippy::needless_range_loop)]
@@ -176,46 +189,6 @@ impl NetherGenerator {
         self.thickness_noise.sample_3d_slice(&mut thickness_field, world_offset, SURFACE_SCALE * 2.0);
 
         (soul_sand_field, gravel_field, thickness_field)
-    }
-
-    fn generate_surface(&self, x: i32, z: i32, column: &mut ChunkBuffer, rand: &mut JavaRand, block_ids: &BlockIds) {
-        let (soul_sand_field, gravel_field, thickness_field) = self.sample_surface_fields(x, z);
-
-        for lz in 0..CHUNK_WIDTH {
-            for lx in 0..CHUNK_WIDTH {
-                let has_soul_sand = soul_sand_field[lx][lz] + rand.random::<f64>() * 0.2 > 0.0;
-                let has_gravel = gravel_field[lx][lz] + rand.random::<f64>() * 0.2 > 0.0;
-                let surface_thickness = (thickness_field[lx][lz] / 3.0 + 3.0 + rand.random::<f64>() * 0.25) as i32;
-
-                carve_column(column, lx, lz, has_soul_sand, has_gravel, surface_thickness, rand, block_ids);
-            }
-        }
-    }
-}
-
-impl TerrainSource for NetherGenerator {
-    fn raw_terrain(&self, x: i32, z: i32) -> ChunkBuffer {
-        self.build_terrain_column(x, z)
-    }
-
-    fn carve_caves(&self, x: i32, z: i32, column: &mut ChunkBuffer) {
-        CaveCarver::new(CAVE_RADIUS).carve(self.seed, x, z, column, &self.block_ids);
-    }
-
-    fn min_sub_chunk_y(&self) -> i8 {
-        -4
-    }
-
-    fn dimension_sub_chunk_count(&self) -> usize {
-        24
-    }
-
-    fn air_id(&self) -> i32 {
-        self.block_ids.air
-    }
-
-    fn biome(&self) -> i32 {
-        1
     }
 }
 

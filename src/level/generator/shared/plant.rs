@@ -1,15 +1,14 @@
 use glam::IVec3;
 
+use super::HORIZONTAL_FACES;
 use super::block_ids::BlockIds;
 use super::quad_chunk_buffer::{QuadChunkBuffer, read, write};
 use super::tree::is_leaves;
-use super::{HORIZONTAL_FACES, TerrainSource};
 use crate::rand::java::JavaRand;
 use crate::rand::primitives::Bound;
 
 #[allow(clippy::too_many_arguments)]
-pub fn place_plants<T: TerrainSource>(
-    generator: &T,
+pub fn place_plants(
     buffer: &mut QuadChunkBuffer,
     mut pos: IVec3,
     block_ids: &BlockIds,
@@ -21,7 +20,7 @@ pub fn place_plants<T: TerrainSource>(
 ) {
     if find_ground {
         while pos.y > 0 {
-            let id = read(generator, buffer, pos.x, pos.y, pos.z);
+            let id = read(buffer, pos.x, pos.y, pos.z);
             if id != block_ids.air && !is_leaves(block_ids, id) {
                 break;
             }
@@ -37,11 +36,11 @@ pub fn place_plants<T: TerrainSource>(
                 rand.random_with::<i32>(Bound::new(8)) - rand.random_with::<i32>(Bound::new(8)),
             );
 
-        if read(generator, buffer, place_pos.x, place_pos.y, place_pos.z) != block_ids.air {
+        if read(buffer, place_pos.x, place_pos.y, place_pos.z) != block_ids.air {
             continue;
         }
 
-        let support = read(generator, buffer, place_pos.x, place_pos.y - 1, place_pos.z);
+        let support = read(buffer, place_pos.x, place_pos.y - 1, place_pos.z);
         if !is_valid_support(block_ids, support) {
             continue;
         }
@@ -50,7 +49,7 @@ pub fn place_plants<T: TerrainSource>(
     }
 }
 
-pub fn place_sugar_canes(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, pos: IVec3, block_ids: &BlockIds, rand: &mut JavaRand) {
+pub fn place_sugar_canes(buffer: &mut QuadChunkBuffer, pos: IVec3, block_ids: &BlockIds, rand: &mut JavaRand) {
     for _ in 0..20 {
         let place_pos = pos
             + IVec3::new(
@@ -59,7 +58,7 @@ pub fn place_sugar_canes(generator: &impl TerrainSource, buffer: &mut QuadChunkB
                 rand.random_with::<i32>(Bound::new(4)) - rand.random_with::<i32>(Bound::new(4)),
             );
 
-        if read(generator, buffer, place_pos.x, place_pos.y, place_pos.z) != block_ids.air {
+        if read(buffer, place_pos.x, place_pos.y, place_pos.z) != block_ids.air {
             continue;
         }
 
@@ -67,18 +66,18 @@ pub fn place_sugar_canes(generator: &impl TerrainSource, buffer: &mut QuadChunkB
 
         for face in HORIZONTAL_FACES {
             let water_pos = below_pos + face;
-            if read(generator, buffer, water_pos.x, water_pos.y, water_pos.z) != block_ids.water {
+            if read(buffer, water_pos.x, water_pos.y, water_pos.z) != block_ids.water {
                 continue;
             }
 
             let v = rand.random_with::<i32>(Bound::new(3)) + 1;
             let height = rand.random_with::<i32>(Bound::new(v)) + 2;
 
-            let below = read(generator, buffer, below_pos.x, below_pos.y, below_pos.z);
+            let below = read(buffer, below_pos.x, below_pos.y, below_pos.z);
             let can_place = (below == block_ids.grass || below == block_ids.dirt)
                 && HORIZONTAL_FACES.iter().any(|&f| {
                     let p = below_pos + f;
-                    read(generator, buffer, p.x, p.y, p.z) == block_ids.water
+                    read(buffer, p.x, p.y, p.z) == block_ids.water
                 });
 
             if can_place {
@@ -90,7 +89,7 @@ pub fn place_sugar_canes(generator: &impl TerrainSource, buffer: &mut QuadChunkB
     }
 }
 
-pub fn place_pumpkin(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, pos: IVec3, block_ids: &BlockIds, rand: &mut JavaRand) {
+pub fn place_pumpkin(buffer: &mut QuadChunkBuffer, pos: IVec3, block_ids: &BlockIds, rand: &mut JavaRand) {
     for _ in 0..64 {
         let place_pos = pos
             + IVec3::new(
@@ -99,23 +98,20 @@ pub fn place_pumpkin(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffe
                 rand.random_with::<i32>(Bound::new(8)) - rand.random_with::<i32>(Bound::new(8)),
             );
 
-        if read(generator, buffer, place_pos.x, place_pos.y, place_pos.z) != block_ids.air {
+        if read(buffer, place_pos.x, place_pos.y, place_pos.z) != block_ids.air {
             continue;
         }
-        let below = read(generator, buffer, place_pos.x, place_pos.y - 1, place_pos.z);
+        let below = read(buffer, place_pos.x, place_pos.y - 1, place_pos.z);
         if below != block_ids.grass {
             continue;
         }
 
-        // Facing isn't modeled (no permutation-state writer exists yet for any block
-        // in this generator), but the roll is still consumed to keep the RNG stream
-        // in sync with the reference.
         let _facing = rand.random_with::<i32>(Bound::new(4));
         write(buffer, place_pos.x, place_pos.y, place_pos.z, block_ids.pumpkin);
     }
 }
 
-pub fn place_cactus(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, pos: IVec3, block_ids: &BlockIds, rand: &mut JavaRand) {
+pub fn place_cactus(buffer: &mut QuadChunkBuffer, pos: IVec3, block_ids: &BlockIds, rand: &mut JavaRand) {
     for _ in 0..10 {
         let place_pos = pos
             + IVec3::new(
@@ -124,7 +120,7 @@ pub fn place_cactus(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer
                 rand.random_with::<i32>(Bound::new(8)) - rand.random_with::<i32>(Bound::new(8)),
             );
 
-        if read(generator, buffer, place_pos.x, place_pos.y, place_pos.z) != block_ids.air {
+        if read(buffer, place_pos.x, place_pos.y, place_pos.z) != block_ids.air {
             continue;
         }
 
@@ -132,21 +128,21 @@ pub fn place_cactus(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer
         let height = rand.random_with::<i32>(Bound::new(v)) + 1;
 
         for dy in 0..height {
-            if can_place_cactus(generator, buffer, block_ids, place_pos) {
+            if can_place_cactus(buffer, block_ids, place_pos) {
                 write(buffer, place_pos.x, place_pos.y + dy, place_pos.z, block_ids.cactus);
             }
         }
     }
 }
 
-fn can_place_cactus(generator: &impl TerrainSource, buffer: &QuadChunkBuffer, block_ids: &BlockIds, pos: IVec3) -> bool {
+fn can_place_cactus(buffer: &QuadChunkBuffer, block_ids: &BlockIds, pos: IVec3) -> bool {
     for face in HORIZONTAL_FACES {
         let neighbor = pos + face;
-        let id = read(generator, buffer, neighbor.x, neighbor.y, neighbor.z);
+        let id = read(buffer, neighbor.x, neighbor.y, neighbor.z);
         if id != block_ids.air && id != block_ids.water {
             return false;
         }
     }
-    let below = read(generator, buffer, pos.x, pos.y - 1, pos.z);
+    let below = read(buffer, pos.x, pos.y - 1, pos.z);
     below == block_ids.cactus || below == block_ids.sand
 }

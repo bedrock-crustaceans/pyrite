@@ -2,7 +2,7 @@ use glam::{DVec3, IVec3};
 
 use super::block_ids::BlockIds;
 use super::quad_chunk_buffer::{QuadChunkBuffer, column_at};
-use super::{CHUNK_HEIGHT, CHUNK_WIDTH, TerrainSource};
+use super::{CHUNK_HEIGHT, CHUNK_WIDTH};
 use crate::level::generator::math::{MC_PI, mc_sin, mc_sin_cos};
 use crate::rand::java::JavaRand;
 use crate::rand::primitives::Bound;
@@ -17,36 +17,36 @@ pub fn next_offset(rand: &mut JavaRand, max_y: i32, offset_xz: i32) -> IVec3 {
     )
 }
 
-pub fn populate_ores(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, owner_x: i32, owner_z: i32, block_ids: &BlockIds, rand: &mut JavaRand) {
+pub fn populate_ores(buffer: &mut QuadChunkBuffer, owner_x: i32, owner_z: i32, block_ids: &BlockIds, rand: &mut JavaRand) {
     let origin = IVec3::new(owner_x * CHUNK_WIDTH as i32, 0, owner_z * CHUNK_WIDTH as i32);
 
     for _ in 0..20 {
         let pos = origin + next_offset(rand, 128, 0);
-        place_vein(generator, buffer, block_ids.stone, block_ids.dirt, 32, pos, rand);
+        place_vein(buffer, block_ids.stone, block_ids.dirt, 32, pos, rand);
     }
     for _ in 0..10 {
         let pos = origin + next_offset(rand, 128, 0);
-        place_vein(generator, buffer, block_ids.stone, block_ids.gravel, 32, pos, rand);
+        place_vein(buffer, block_ids.stone, block_ids.gravel, 32, pos, rand);
     }
     for _ in 0..20 {
         let pos = origin + next_offset(rand, 128, 0);
-        place_vein(generator, buffer, block_ids.stone, block_ids.coal_ore, 16, pos, rand);
+        place_vein(buffer, block_ids.stone, block_ids.coal_ore, 16, pos, rand);
     }
     for _ in 0..20 {
         let pos = origin + next_offset(rand, 64, 0);
-        place_vein(generator, buffer, block_ids.stone, block_ids.iron_ore, 8, pos, rand);
+        place_vein(buffer, block_ids.stone, block_ids.iron_ore, 8, pos, rand);
     }
     for _ in 0..2 {
         let pos = origin + next_offset(rand, 32, 0);
-        place_vein(generator, buffer, block_ids.stone, block_ids.gold_ore, 8, pos, rand);
+        place_vein(buffer, block_ids.stone, block_ids.gold_ore, 8, pos, rand);
     }
     for _ in 0..8 {
         let pos = origin + next_offset(rand, 16, 0);
-        place_vein(generator, buffer, block_ids.stone, block_ids.redstone_ore, 7, pos, rand);
+        place_vein(buffer, block_ids.stone, block_ids.redstone_ore, 7, pos, rand);
     }
     for _ in 0..1 {
         let pos = origin + next_offset(rand, 16, 0);
-        place_vein(generator, buffer, block_ids.stone, block_ids.diamond_ore, 7, pos, rand);
+        place_vein(buffer, block_ids.stone, block_ids.diamond_ore, 7, pos, rand);
     }
     for _ in 0..1 {
         let bound = CHUNK_WIDTH as i32;
@@ -57,11 +57,11 @@ pub fn populate_ores(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffe
                 rand.random_with::<i32>(Bound::new(16)) + rand.random_with::<i32>(Bound::new(16)),
                 rand.random_with::<i32>(Bound::new(bound)),
             );
-        place_vein(generator, buffer, block_ids.stone, block_ids.lapis_ore, 6, pos, rand);
+        place_vein(buffer, block_ids.stone, block_ids.lapis_ore, 6, pos, rand);
     }
 }
 
-pub fn place_vein(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, replace_id: i32, place_id: i32, count: i32, pos: IVec3, rand: &mut JavaRand) {
+pub fn place_vein(buffer: &mut QuadChunkBuffer, replace_id: i32, place_id: i32, count: i32, pos: IVec3, rand: &mut JavaRand) {
     let angle = rand.random::<f32>() * MC_PI;
     let (angle_sin, angle_cos) = mc_sin_cos(angle);
     let angle_sin = angle_sin * count as f32 / 8.0;
@@ -112,7 +112,7 @@ pub fn place_vein(generator: &impl TerrainSource, buffer: &mut QuadChunkBuffer, 
                         continue;
                     }
 
-                    if column.read(generator, buffer, wy) == replace_id {
+                    if column.read(buffer, wy) == replace_id {
                         column.write(buffer, wy, place_id);
                     }
                 }

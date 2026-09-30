@@ -1,6 +1,7 @@
 pub mod biome;
 mod phases;
 mod plant;
+mod spawn;
 mod vein;
 
 use chorus::registry::block_registry::BlockRegistry;
@@ -10,10 +11,9 @@ use crate::level::generator::overworld::biome::{Biome, biome_from_climate};
 use crate::level::generator::shared::block_ids::BlockIds;
 use crate::level::generator::shared::cave::CaveCarver;
 use crate::level::generator::shared::chunk_buffer::ChunkBuffer;
-use crate::level::generator::shared::phases::Population;
+use crate::level::generator::shared::chunk_seed;
 use crate::level::generator::shared::quad_chunk_buffer::QuadChunkBuffer;
 use crate::level::generator::shared::{CAVE_RADIUS, CHUNK_HEIGHT, CHUNK_WIDTH, dungeon, lake, snow, spring, tree};
-use crate::level::generator::shared::{ClimateSource, TerrainSource, chunk_seed};
 use crate::noise::octave::OctaveNoise;
 use crate::rand::java::JavaRand;
 use crate::rand::primitives::Bound;
@@ -42,6 +42,12 @@ type SurfaceField = [[f64; CHUNK_WIDTH]; CHUNK_WIDTH];
 type BiomeGrid = [[Biome; CHUNK_WIDTH]; CHUNK_WIDTH];
 type ReliefField = [[f64; DENSITY_GRID_SIZE]; DENSITY_GRID_SIZE];
 type DensityField = [[[f64; DENSITY_GRID_SIZE]; DENSITY_GRID_HEIGHT]; DENSITY_GRID_SIZE];
+
+pub struct Climate {
+    temperature: ClimateField,
+    humidity: ClimateField,
+    biomes: BiomeGrid,
+}
 
 pub struct OverworldGenerator {
     pub seed: i64,
@@ -87,47 +93,74 @@ impl OverworldGenerator {
         }
     }
 
-    fn generate_biomes(&self, x: i32, z: i32, temperature_grid: &mut ClimateField, humidity_grid: &mut ClimateField) -> BiomeGrid {
+    fn climate(&self, x: i32, z: i32) -> Climate {
         let world_offset = DVec2::new((x * CHUNK_WIDTH as i32) as f64, (z * CHUNK_WIDTH as i32) as f64);
 
-        let mut biome_noise_grid: ClimateField = [[0.0; CHUNK_WIDTH]; CHUNK_WIDTH];
+        let mut temperature: ClimateField = [[0.0; CHUNK_WIDTH]; CHUNK_WIDTH];
+        let mut humidity: ClimateField = [[0.0; CHUNK_WIDTH]; CHUNK_WIDTH];
+        let mut biome_noise: ClimateField = [[0.0; CHUNK_WIDTH]; CHUNK_WIDTH];
 
         self.temperature_noise
-            .sample_simplex_2d(temperature_grid, world_offset, DVec2::splat(CLIMATE_SCALE), CLIMATE_FREQUENCY_FACTOR);
+            .sample_simplex_2d(&mut temperature, world_offset, DVec2::splat(CLIMATE_SCALE), CLIMATE_FREQUENCY_FACTOR);
         self.humidity_noise
-            .sample_simplex_2d(humidity_grid, world_offset, DVec2::splat(HUMIDITY_SCALE), HUMIDITY_FREQUENCY_FACTOR);
-        self.biome_noise
-            .sample_simplex_2d(&mut biome_noise_grid, world_offset, DVec2::splat(BIOME_SCALE), BIOME_FREQUENCY_FACTOR);
+            .sample_simplex_2d(&mut humidity, world_offset, DVec2::splat(HUMIDITY_SCALE), HUMIDITY_FREQUENCY_FACTOR);
+        self.biome_noise.sample_simplex_2d(&mut biome_noise, world_offset, DVec2::splat(BIOME_SCALE), BIOME_FREQUENCY_FACTOR);
 
-        let mut biome_grid = [[Biome::Void; CHUNK_WIDTH]; CHUNK_WIDTH];
+        let mut biomes = [[Biome::Void; CHUNK_WIDTH]; CHUNK_WIDTH];
 
         for lx in 0..CHUNK_WIDTH {
             for lz in 0..CHUNK_WIDTH {
-                let (temperature, humidity, biome) = classify_climate(temperature_grid[lx][lz], humidity_grid[lx][lz], biome_noise_grid[lx][lz]);
+                let (classified_temperature, classified_humidity, biome) = classify_climate(temperature[lx][lz], humidity[lx][lz], biome_noise[lx][lz]);
 
-                temperature_grid[lx][lz] = temperature;
-                humidity_grid[lx][lz] = humidity;
-                biome_grid[lx][lz] = biome;
+                temperature[lx][lz] = classified_temperature;
+                humidity[lx][lz] = classified_humidity;
+                biomes[lx][lz] = biome;
             }
         }
 
-        biome_grid
+        Climate { temperature, humidity, biomes }
     }
 
-    fn build_terrain_column(&self, x: i32, z: i32) -> ChunkBuffer {
-        let block_ids = &self.block_ids;
-        let mut column = ChunkBuffer::new(block_ids.air);
-
-        let mut temperature_grid: ClimateField = [[0.0; CHUNK_WIDTH]; CHUNK_WIDTH];
-        let mut humidity_grid: ClimateField = [[0.0; CHUNK_WIDTH]; CHUNK_WIDTH];
-
-        let biome_grid = self.generate_biomes(x, z, &mut temperature_grid, &mut humidity_grid);
-        self.generate_terrain(x, z, &mut column, &temperature_grid, &humidity_grid, block_ids);
-
-        let mut rand = JavaRand::new(i64::wrapping_add((x as i64).wrapping_mul(341873128712), (z as i64).wrapping_mul(132897987541)));
-        self.generate_surface(x, z, &mut column, &biome_grid, &mut rand, block_ids);
-
+    fn terrain(&self, x: i32, z: i32, climate: &Climate) -> ChunkBuffer {
+        let mut column = ChunkBuffer::new(self.block_ids.air);
+        let density = self.build_density_field(x, z, &climate.temperature, &climate.humidity);
+        place_terrain(&mut column, &density, &climate.temperature, &self.block_ids);
         column
+    }
+
+    fn surface(&self, x: i32, z: i32, column: &mut ChunkBuffer, climate: &Climate) {
+        let (sand_field, gravel_field, thickness_field) = self.sample_surface_fields(x, z);
+        let mut rand = JavaRand::new(i64::wrapping_add((x as i64).wrapping_mul(341873128712), (z as i64).wrapping_mul(132897987541)));
+
+        for lz in 0..CHUNK_WIDTH {
+            for lx in 0..CHUNK_WIDTH {
+                let biome = climate.biomes[lx][lz];
+                let has_sand = sand_field[lx][lz] + rand.random::<f64>() * 0.2 > 0.0;
+                let has_gravel = gravel_field[lx][lz] + rand.random::<f64>() * 0.2 > 3.0;
+                let surface_thickness = (thickness_field[lx][lz] / 3.0 + 3.0 + rand.random::<f64>() * 0.25) as i32;
+
+                carve_column(column, lx, lz, biome, has_sand, has_gravel, surface_thickness, &mut rand, &self.block_ids);
+            }
+        }
+    }
+
+    fn carve_caves(&self, x: i32, z: i32, column: &mut ChunkBuffer) {
+        CaveCarver::new(CAVE_RADIUS).carve(self.seed, x, z, column, &self.block_ids);
+    }
+
+    fn populate(&self, owner_x: i32, owner_z: i32, buffer: &mut QuadChunkBuffer) {
+        let mut rand = JavaRand::new(chunk_seed(self.seed, owner_x, owner_z));
+
+        lake::populate_from(buffer, owner_x, owner_z, &self.block_ids, &mut rand);
+        dungeon::populate_from(buffer, owner_x, owner_z, &self.block_ids, &mut rand);
+        vein::populate_from(self, buffer, owner_x, owner_z, &mut rand);
+        let origin = (owner_x * CHUNK_WIDTH as i32, owner_z * CHUNK_WIDTH as i32);
+        let biome = self.biome_at(origin.0 + 16, origin.1 + 16);
+        let feature_value = self.feature_noise_at(origin.0 as f64 * 0.5, origin.1 as f64 * 0.5);
+        tree::populate_from(buffer, owner_x, owner_z, biome, feature_value, &self.block_ids, &mut rand);
+        plant::populate_from(self, buffer, owner_x, owner_z, &mut rand);
+        spring::populate_from(buffer, owner_x, owner_z, &self.block_ids, &mut rand);
+        snow::populate_from(buffer, owner_x, owner_z, &self.block_ids, |x, z| self.climate_at(x, z).0);
     }
 
     fn climate_at(&self, x: i32, z: i32) -> (f64, f64, Biome) {
@@ -240,19 +273,11 @@ impl OverworldGenerator {
         density
     }
 
-    fn generate_terrain(&self, x: i32, z: i32, column: &mut ChunkBuffer, temperature_grid: &ClimateField, humidity_grid: &ClimateField, block_ids: &BlockIds) {
-        let density = self.build_density_field(x, z, temperature_grid, humidity_grid);
-        place_terrain(column, &density, temperature_grid, block_ids);
-    }
-
     fn sample_surface_fields(&self, x: i32, z: i32) -> (SurfaceField, SurfaceField, SurfaceField) {
         const SURFACE_SCALE: f64 = 1.0 / 32.0;
 
         let world_offset = DVec2::new((x * CHUNK_WIDTH as i32) as f64, (z * CHUNK_WIDTH as i32) as f64);
 
-        // sample_3d_slice and sample_2d below sample different noise paths and are not
-        // interchangeable - see their docs. The reference generator's sand and thickness
-        // fields use the former, its gravel field the latter.
         let mut sand_field: SurfaceField = [[0.0; CHUNK_WIDTH]; CHUNK_WIDTH];
         let mut gravel_field: SurfaceField = [[0.0; CHUNK_WIDTH]; CHUNK_WIDTH];
         let mut thickness_field: SurfaceField = [[0.0; CHUNK_WIDTH]; CHUNK_WIDTH];
@@ -262,61 +287,6 @@ impl OverworldGenerator {
         self.thickness_noise.sample_3d_slice(&mut thickness_field, world_offset, SURFACE_SCALE * 2.0);
 
         (sand_field, gravel_field, thickness_field)
-    }
-
-    fn generate_surface(&self, x: i32, z: i32, column: &mut ChunkBuffer, biome_grid: &BiomeGrid, rand: &mut JavaRand, block_ids: &BlockIds) {
-        let (sand_field, gravel_field, thickness_field) = self.sample_surface_fields(x, z);
-
-        // Iteration order (z outer, x inner) must match the reference generator exactly:
-        // it determines how the per-column random calls below line up with world position.
-        for lz in 0..CHUNK_WIDTH {
-            for lx in 0..CHUNK_WIDTH {
-                let biome = biome_grid[lx][lz];
-                let has_sand = sand_field[lx][lz] + rand.random::<f64>() * 0.2 > 0.0;
-                let has_gravel = gravel_field[lx][lz] + rand.random::<f64>() * 0.2 > 3.0;
-                let surface_thickness = (thickness_field[lx][lz] / 3.0 + 3.0 + rand.random::<f64>() * 0.25) as i32;
-
-                carve_column(column, lx, lz, biome, has_sand, has_gravel, surface_thickness, rand, block_ids);
-            }
-        }
-    }
-}
-
-// Decoration (lake/dungeon/vein/tree/plant/spring/snow) reads terrain through this - always a
-// fresh, uncached computation, same as any other out-of-quad read during population.
-impl TerrainSource for OverworldGenerator {
-    fn raw_terrain(&self, x: i32, z: i32) -> ChunkBuffer {
-        self.build_terrain_column(x, z)
-    }
-
-    fn carve_caves(&self, x: i32, z: i32, column: &mut ChunkBuffer) {
-        CaveCarver::new(CAVE_RADIUS).carve(self.seed, x, z, column, &self.block_ids);
-    }
-
-    fn min_sub_chunk_y(&self) -> i8 {
-        -4
-    }
-
-    fn dimension_sub_chunk_count(&self) -> usize {
-        24
-    }
-
-    fn air_id(&self) -> i32 {
-        self.block_ids.air
-    }
-
-    fn biome(&self) -> i32 {
-        1
-    }
-}
-
-impl ClimateSource for OverworldGenerator {
-    fn climate_at(&self, x: i32, z: i32) -> (f64, f64, Biome) {
-        self.climate_at(x, z)
-    }
-
-    fn feature_noise_at(&self, x: f64, z: f64) -> f64 {
-        self.feature_noise_at(x, z)
     }
 }
 
@@ -452,19 +422,5 @@ fn carve_column(column: &mut ChunkBuffer, lx: usize, lz: usize, biome: Biome, ha
                 }
             }
         }
-    }
-}
-
-impl Population for OverworldGenerator {
-    fn run_population_raw(&self, owner_x: i32, owner_z: i32, buffer: &mut QuadChunkBuffer) {
-        let mut rand = JavaRand::new(chunk_seed(self.seed, owner_x, owner_z));
-
-        lake::populate_from(self, buffer, owner_x, owner_z, &self.block_ids, &mut rand);
-        dungeon::populate_from(self, buffer, owner_x, owner_z, &self.block_ids, &mut rand);
-        vein::populate_from(self, buffer, owner_x, owner_z, &mut rand);
-        tree::populate_from(self, buffer, owner_x, owner_z, &self.block_ids, &mut rand);
-        plant::populate_from(self, buffer, owner_x, owner_z, &mut rand);
-        spring::populate_from(self, buffer, owner_x, owner_z, &self.block_ids, &mut rand);
-        snow::populate_from(self, buffer, owner_x, owner_z, &self.block_ids);
     }
 }

@@ -12,8 +12,8 @@ pub fn populate_from(generator: &SkyGenerator, buffer: &mut QuadChunkBuffer, own
 
     for _ in 0..10 {
         let pos = origin + next_offset(rand, 128, 0);
-        place_vein(generator, buffer, block_ids.sand, block_ids.clay, 32, pos, rand);
+        place_vein(buffer, block_ids.sand, block_ids.clay, 32, pos, rand);
     }
 
-    populate_ores(generator, buffer, owner_x, owner_z, block_ids, rand);
+    populate_ores(buffer, owner_x, owner_z, block_ids, rand);
 }
