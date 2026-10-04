@@ -7,7 +7,6 @@ use chorus::config::Config;
 use chorus::level::dimension_type::DimensionType;
 use chorus::level::level::Level;
 use chorus::registry::block_registry::BlockRegistry;
-use tracing::info;
 
 pub mod generator;
 
@@ -25,6 +24,4 @@ pub fn override_level(mut level: ResMut<Level>, registry: Res<BlockRegistry>, co
 
     level.insert_dimension(DimensionType::Overworld, overworld);
     level.insert_dimension(DimensionType::Nether, nether);
-
-    info!("registered b1.7.3 level with seed {}, spawn at {}", level.seed, level.spawn);
 }
