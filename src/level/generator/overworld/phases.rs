@@ -1,8 +1,8 @@
-use chorus::error::phase::PhaseError;
 use chorus::level::biome::biome_id::BiomeID;
 use chorus::level::chunk::Chunk;
 use chorus::level::dimension_type::DimensionType;
 use chorus::level::generator::dimension::Generator;
+use chorus::level::generator::error::PhaseError;
 use chorus::level::generator::phase::{Phase, PhaseInputs, Requirement, SAME_CELL};
 use chorus::level::generator::pos::ChunkPos;
 
