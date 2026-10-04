@@ -13,7 +13,7 @@ pub mod generator;
 
 pub fn override_level(mut level: ResMut<Level>, registry: Res<BlockRegistry>, config: Res<Config>) {
     if level.is_new() {
-        level.seed = config.level_seed.parse_with(parse_seed);
+        level.seed = config.level.seed.parse_with(parse_seed);
     }
 
     let overworld = OverworldGenerator::new(level.seed, &registry);
