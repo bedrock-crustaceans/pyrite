@@ -3,16 +3,16 @@ use crate::level::generator::overworld::OverworldGenerator;
 use crate::level::generator::seed::parse_seed;
 use bevy_ecs::prelude::Res;
 use bevy_ecs::system::ResMut;
-use chorus::config::Config;
+use chorus::core::config::LevelConfig;
 use chorus::level::dimension_type::DimensionType;
 use chorus::level::level::Level;
 use chorus::registry::block_registry::BlockRegistry;
 
 pub mod generator;
 
-pub fn override_level(mut level: ResMut<Level>, registry: Res<BlockRegistry>, config: Res<Config>) {
+pub fn override_level(mut level: ResMut<Level>, registry: Res<BlockRegistry>, config: Res<LevelConfig>) {
     if level.is_new() {
-        level.seed = config.level.seed.parse_with(parse_seed);
+        level.seed = config.seed.parse_with(parse_seed);
     }
 
     let overworld = OverworldGenerator::new(level.seed, &registry);

@@ -1,6 +1,6 @@
 use chorus::level::chunk::Chunk;
 use chorus::level::dimension_type::DimensionType;
-use chorus::level::generator::pos::ChunkPos;
+use glam::IVec2;
 use chorus::level::sub_chunk::SubChunk;
 
 use super::{SUB_CHUNK_COUNT, SUB_CHUNK_SIZE};
@@ -21,8 +21,8 @@ impl ChunkBuffer {
         self.0[y / SUB_CHUNK_SIZE][x][y % SUB_CHUNK_SIZE][z] = block_id;
     }
 
-    pub fn into_chunk(self, cell: ChunkPos, dimension_type: DimensionType, air_id: i32, biome: i32) -> Chunk {
-        let mut chunk = Chunk::new(cell.x, cell.z, dimension_type.min_sub_chunk_y(), dimension_type.sub_chunk_count(), air_id, biome);
+    pub fn into_chunk(self, cell: IVec2, dimension_type: DimensionType, air_id: i32, biome: i32) -> Chunk {
+        let mut chunk = Chunk::new(cell.x, cell.y, dimension_type.min_sub_chunk_y(), dimension_type.sub_chunk_count(), air_id, biome);
 
         for (sub_y, blocks) in self.0.iter().enumerate() {
             let mut flat = [0i32; 4096];

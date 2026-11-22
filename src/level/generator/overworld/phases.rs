@@ -1,11 +1,11 @@
-use chorus::level::biome::biome_id::BiomeID;
 use chorus::level::chunk::Chunk;
 use chorus::level::dimension_type::DimensionType;
 use chorus::level::generator::dimension::Generator;
 use chorus::level::generator::error::PhaseError;
-use chorus::level::generator::phase::{Phase, PhaseInputs, Requirement, SAME_CELL};
-use chorus::level::generator::pos::ChunkPos;
+use chorus::level::generator::phase::{Dependency, Phase, PhaseContext, SAME_CELL};
+use glam::IVec2;
 
+use chorus::worldgen::shared::biome::pack_ids::PLAINS;
 use super::{Climate, OverworldGenerator};
 use crate::level::generator::shared::chunk_buffer::ChunkBuffer;
 use crate::level::generator::shared::quad_chunk_buffer::{QuadChanges, QuadChunkBuffer};
@@ -23,8 +23,8 @@ pub struct BiomePhase;
 impl Phase<OverworldGenerator> for BiomePhase {
     type Output = Climate;
 
-    fn run(generator: &OverworldGenerator, cell: ChunkPos, _inputs: &mut PhaseInputs<OverworldGenerator>) -> Result<Climate, PhaseError> {
-        Ok(generator.climate(cell.x, cell.z))
+    fn run(generator: &OverworldGenerator, cell: IVec2, _context: &mut PhaseContext<OverworldGenerator>) -> Result<Climate, PhaseError> {
+        Ok(generator.climate(cell.x, cell.y))
     }
 }
 
@@ -33,13 +33,13 @@ pub struct TerrainPhase;
 impl Phase<OverworldGenerator> for TerrainPhase {
     type Output = ChunkBuffer;
 
-    fn requires() -> Vec<Requirement<OverworldGenerator>> {
-        vec![BiomePhase::at(SAME_CELL)]
+    fn dependencies() -> Vec<Dependency<OverworldGenerator>> {
+        vec![Dependency::on::<BiomePhase>(SAME_CELL)]
     }
 
-    fn run(generator: &OverworldGenerator, cell: ChunkPos, inputs: &mut PhaseInputs<OverworldGenerator>) -> Result<ChunkBuffer, PhaseError> {
-        let climate = inputs.get::<BiomePhase>(cell)?;
-        Ok(generator.terrain(cell.x, cell.z, &climate))
+    fn run(generator: &OverworldGenerator, cell: IVec2, context: &mut PhaseContext<OverworldGenerator>) -> Result<ChunkBuffer, PhaseError> {
+        let climate = context.get::<BiomePhase>(cell)?;
+        Ok(generator.terrain(cell.x, cell.y, &climate))
     }
 }
 
@@ -48,14 +48,14 @@ pub struct SurfacePhase;
 impl Phase<OverworldGenerator> for SurfacePhase {
     type Output = ChunkBuffer;
 
-    fn requires() -> Vec<Requirement<OverworldGenerator>> {
-        vec![TerrainPhase::at(SAME_CELL), BiomePhase::at(SAME_CELL)]
+    fn dependencies() -> Vec<Dependency<OverworldGenerator>> {
+        vec![Dependency::on::<TerrainPhase>(SAME_CELL), Dependency::on::<BiomePhase>(SAME_CELL)]
     }
 
-    fn run(generator: &OverworldGenerator, cell: ChunkPos, inputs: &mut PhaseInputs<OverworldGenerator>) -> Result<ChunkBuffer, PhaseError> {
-        let mut column = inputs.take::<TerrainPhase>(cell)?;
-        let climate = inputs.get::<BiomePhase>(cell)?;
-        generator.surface(cell.x, cell.z, &mut column, &climate);
+    fn run(generator: &OverworldGenerator, cell: IVec2, context: &mut PhaseContext<OverworldGenerator>) -> Result<ChunkBuffer, PhaseError> {
+        let mut column = context.take::<TerrainPhase>(cell)?;
+        let climate = context.get::<BiomePhase>(cell)?;
+        generator.surface(cell.x, cell.y, &mut column, &climate);
         Ok(column)
     }
 }
@@ -67,13 +67,13 @@ impl Phase<OverworldGenerator> for CavesPhase {
 
     const RETAIN: usize = 1024;
 
-    fn requires() -> Vec<Requirement<OverworldGenerator>> {
-        vec![SurfacePhase::at(SAME_CELL)]
+    fn dependencies() -> Vec<Dependency<OverworldGenerator>> {
+        vec![Dependency::on::<SurfacePhase>(SAME_CELL)]
     }
 
-    fn run(generator: &OverworldGenerator, cell: ChunkPos, inputs: &mut PhaseInputs<OverworldGenerator>) -> Result<ChunkBuffer, PhaseError> {
-        let mut column = inputs.take::<SurfacePhase>(cell)?;
-        generator.carve_caves(cell.x, cell.z, &mut column);
+    fn run(generator: &OverworldGenerator, cell: IVec2, context: &mut PhaseContext<OverworldGenerator>) -> Result<ChunkBuffer, PhaseError> {
+        let mut column = context.take::<SurfacePhase>(cell)?;
+        generator.carve_caves(cell.x, cell.y, &mut column);
         Ok(column)
     }
 }
@@ -85,24 +85,24 @@ impl Phase<OverworldGenerator> for PopulationPhase {
 
     const RETAIN: usize = 1024;
 
-    fn requires() -> Vec<Requirement<OverworldGenerator>> {
-        vec![CavesPhase::at(FORWARD_QUAD), PopulationPhase::at(BACKWARD_NEIGHBORS).max_hops(1)]
+    fn dependencies() -> Vec<Dependency<OverworldGenerator>> {
+        vec![Dependency::on::<CavesPhase>(FORWARD_QUAD), Dependency::on::<PopulationPhase>(BACKWARD_NEIGHBORS).max_hops(1)]
     }
 
-    fn run(generator: &OverworldGenerator, cell: ChunkPos, inputs: &mut PhaseInputs<OverworldGenerator>) -> Result<QuadChanges, PhaseError> {
-        let caves = |dx: i32, dz: i32| inputs.get::<CavesPhase>(ChunkPos::new(cell.x + dx, cell.z + dz));
+    fn run(generator: &OverworldGenerator, cell: IVec2, context: &mut PhaseContext<OverworldGenerator>) -> Result<QuadChanges, PhaseError> {
+        let caves = |dx: i32, dz: i32| context.get::<CavesPhase>(IVec2::new(cell.x + dx, cell.y + dz));
 
         let baseline = caves(0, 0)?;
         let mut home = (*baseline).clone();
         for &(dx, dz) in BACKWARD_NEIGHBORS {
-            if let Some(neighbor) = inputs.try_get::<PopulationPhase>(ChunkPos::new(cell.x + dx, cell.z + dz)) {
-                neighbor.overlay_onto(cell.x, cell.z, &baseline, &mut home);
+            if let Some(neighbor) = context.try_get::<PopulationPhase>(IVec2::new(cell.x + dx, cell.y + dz)) {
+                neighbor.overlay_onto(cell.x, cell.y, &baseline, &mut home);
             }
         }
 
         let columns = [[home, (*caves(0, 1)?).clone()], [(*caves(1, 0)?).clone(), (*caves(1, 1)?).clone()]];
-        let mut quad = QuadChunkBuffer::new(cell.x, cell.z, generator.block_ids.air, columns);
-        generator.populate(cell.x, cell.z, &mut quad);
+        let mut quad = QuadChunkBuffer::new(cell.x, cell.y, generator.block_ids.air, columns);
+        generator.populate(cell.x, cell.y, &mut quad);
         quad.into_changes().map_err(PhaseError::custom)
     }
 }
@@ -112,16 +112,16 @@ pub struct ColumnPhase;
 impl Phase<OverworldGenerator> for ColumnPhase {
     type Output = ChunkBuffer;
 
-    fn requires() -> Vec<Requirement<OverworldGenerator>> {
-        vec![CavesPhase::at(SAME_CELL), PopulationPhase::at(OWNER_QUAD)]
+    fn dependencies() -> Vec<Dependency<OverworldGenerator>> {
+        vec![Dependency::on::<CavesPhase>(SAME_CELL), Dependency::on::<PopulationPhase>(OWNER_QUAD)]
     }
 
-    fn run(_generator: &OverworldGenerator, cell: ChunkPos, inputs: &mut PhaseInputs<OverworldGenerator>) -> Result<ChunkBuffer, PhaseError> {
-        let baseline = inputs.get::<CavesPhase>(cell)?;
+    fn run(_generator: &OverworldGenerator, cell: IVec2, context: &mut PhaseContext<OverworldGenerator>) -> Result<ChunkBuffer, PhaseError> {
+        let baseline = context.get::<CavesPhase>(cell)?;
         let mut column = (*baseline).clone();
         for &(dx, dz) in OWNER_QUAD {
-            let owner = inputs.get::<PopulationPhase>(ChunkPos::new(cell.x + dx, cell.z + dz))?;
-            owner.overlay_onto(cell.x, cell.z, &baseline, &mut column);
+            let owner = context.get::<PopulationPhase>(IVec2::new(cell.x + dx, cell.y + dz))?;
+            owner.overlay_onto(cell.x, cell.y, &baseline, &mut column);
         }
         Ok(column)
     }
@@ -132,11 +132,11 @@ pub struct ChunkPhase;
 impl Phase<OverworldGenerator> for ChunkPhase {
     type Output = Chunk;
 
-    fn requires() -> Vec<Requirement<OverworldGenerator>> {
-        vec![ColumnPhase::at(SAME_CELL)]
+    fn dependencies() -> Vec<Dependency<OverworldGenerator>> {
+        vec![Dependency::on::<ColumnPhase>(SAME_CELL)]
     }
 
-    fn run(generator: &OverworldGenerator, cell: ChunkPos, inputs: &mut PhaseInputs<OverworldGenerator>) -> Result<Chunk, PhaseError> {
-        Ok(inputs.take::<ColumnPhase>(cell)?.into_chunk(cell, DimensionType::Overworld, generator.block_ids.air, BiomeID::PLAINS))
+    fn run(generator: &OverworldGenerator, cell: IVec2, context: &mut PhaseContext<OverworldGenerator>) -> Result<Chunk, PhaseError> {
+        Ok(context.take::<ColumnPhase>(cell)?.into_chunk(cell, DimensionType::Overworld, generator.block_ids.air, PLAINS))
     }
 }

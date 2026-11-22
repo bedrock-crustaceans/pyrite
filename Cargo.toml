@@ -7,8 +7,8 @@ edition = "2024"
 path = "src/lib.rs"
 
 [dependencies]
-bevy_app = "0.19.1"
-bevy_ecs = "0.19.1"
+bevy_app = "0.20.0"
+bevy_ecs = "0.20.0"
 chorus = { git = "https://github.com/bedrock-crustaceans/chorus" }
 glam = "0.34.0"
 
